@@ -59,6 +59,17 @@ main{
 .col + .col{border-left:1px solid var(--line)}
 .col-stage{background:#0a0a0b;overflow:hidden}
 
+/* ---------- 模版（动作按钮，不带选中态圆点） ---------- */
+.tpl-wrap{display:flex;flex-wrap:wrap;gap:7px}
+.tpl{
+  display:flex;align-items:baseline;gap:7px;border:1px solid var(--line);border-radius:999px;
+  background:transparent;padding:6px 11px;cursor:pointer;color:var(--txt);
+  transition:border-color .15s ease,background .15s ease;
+}
+.tpl:hover{border-color:var(--line-2);background:#1c1c20}
+.tpl:active{transform:translateY(1px)}
+.tpl small{color:var(--dim-2);font-size:10px;font-family:var(--mono)}
+
 .sec{padding:14px 16px;border-bottom:1px solid var(--line)}
 .sec:last-child{border-bottom:0}
 .sec-h{
@@ -246,6 +257,13 @@ canvas.dragging{cursor:grabbing}
         <button class="btn btn-ghost" id="btnSample">载入示例</button>
         <button class="btn btn-ghost" id="btnClear">清空</button>
       </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h"><h2>模 版</h2><span class="note">不动你的代码</span></div>
+      <div class="tpl-wrap" id="tplChips"></div>
+      <button class="btn btn-ghost mt10" id="btnTplEmpty" style="width:100%">空模版 · 从零开始</button>
+      <p class="note" style="margin:9px 0 0">预设只改外观与动画编排，套用完直接可播；代码为空时顺便载入配套示例。空模版会清空代码、编排与参数，从头来。</p>
     </div>
   </section>
 
@@ -1024,6 +1042,32 @@ const REVEAL = [
   { id: 'word', label: '逐词', hint: '按语法片段', gran: 'token', rate: 24, tail: 1.0 },
   { id: 'line', label: '逐行', hint: '整行升起', gran: 'line', rate: 7.5, tail: 0.8 },
   { id: 'block', label: '语法块', hint: '按块出现', gran: 'block', rate: 2.4, tail: 1.1 },
+];
+
+/* ---------------- 5.1 模版（预设外观 + 动画编排） ----------------
+   模版只改外观与编排参数，不动你写好的代码；代码为空时顺手载入配套示例。
+   每个模版都带上自动编排，套用完就能直接播。 */
+const TEMPLATES = [
+  {
+    id: 'cinema', label: '电影感', hint: '打字机 · 缓推', sample: 'javascript',
+    theme: 'graphite', ratio: 16 / 9, fontSize: 16, speed: 0.9,
+    reveal: ['type'], move: ['push'], gutter: true, chrome: true, shadow: true, follow: false, autoCam: false,
+  },
+  {
+    id: 'punch', label: '快闪', hint: '逐词 · 环绕', sample: 'go',
+    theme: 'signal', ratio: 16 / 9, fontSize: 15, speed: 1.6,
+    reveal: ['word'], move: ['orbit', 'tilt'], gutter: false, chrome: true, shadow: true, follow: false, autoCam: true,
+  },
+  {
+    id: 'lecture', label: '讲义', hint: '逐行 · 浅色纸', sample: 'python',
+    theme: 'paper', ratio: 16 / 9, fontSize: 17, speed: 1.0,
+    reveal: ['line'], move: ['still'], gutter: true, chrome: false, shadow: false, follow: false, autoCam: false,
+  },
+  {
+    id: 'vertical', label: '竖屏', hint: '9:16 · 环绕', sample: 'typescript',
+    theme: 'abyss', ratio: 9 / 16, fontSize: 18, speed: 1.2,
+    reveal: ['type'], move: ['orbit'], gutter: false, chrome: true, shadow: true, follow: false, autoCam: false,
+  },
 ];
 
 const MOVE = [
@@ -2125,6 +2169,102 @@ function selectAt(t, ch, k) {
   toast(k ? '已选中该点 · 拖动画布视角即可覆盖' : '已选点 ' + t.toFixed(2) + 's · 拖动画布视角即可写入');
 }
 
+/* ---------------- 12.2 模版应用 ----------------
+   套用模版 = 改外观与动画参数 + 重开自动编排；代码非空时绝不覆盖。
+   空模版 = 代码、编排、参数一起回到底，方便从零开始。 */
+function syncAllUI() {
+  $("#langSel").value = S.mode;
+  $("#themeSel").value = S.theme;
+  $("#speed").value = String(Math.round(S.speed * 100));
+  $("#speedVal").textContent = S.speed.toFixed(1) + '×';
+  $("#fontSize").value = String(S.fontSize);
+  $("#fontVal").textContent = String(S.fontSize);
+  const seg = $("#ratioSeg");
+  if (seg) [...seg.children].forEach(b => {
+    const p = b.dataset.ratio.split('/');
+    b.setAttribute('aria-pressed', Math.abs((+p[0] / +p[1]) - S.ratio) < 1e-6 ? 'true' : 'false');
+  });
+  $("#optGutter").checked = S.gutter;
+  $("#optChrome").checked = S.chrome;
+  $("#optShadow").checked = S.shadow;
+  $("#optFollow").checked = S.follow;
+  $("#optAutoCam").checked = S.autoCam;
+  const syncChips = (sel, arr) => {
+    const box = $(sel);
+    if (!box) return;
+    [...box.children].forEach(b => b.setAttribute('aria-pressed', arr.indexOf(b.dataset.id) >= 0 ? 'true' : 'false'));
+  };
+  syncChips('#revealChips', S.reveal);
+  syncChips('#moveChips', S.move);
+  updateViewLabel();
+}
+
+/* 视角立刻归位（不走补间动画，套模版时不该看到旧角度） */
+function resetViewNow() {
+  viewTween = null;
+  view3d.rotX = 0; view3d.rotY = 0; view3d.dist = 0;
+  updateViewLabel();
+}
+
+function applyTemplate(t) {
+  const ta = $("#code");
+  const blank = !ta.value.trim();
+  if (blank) { ta.value = SAMPLES[t.sample] || SAMPLES.javascript; S.mode = 'auto'; }
+  S.reveal = t.reveal.slice();
+  S.move = t.move.slice();
+  S.theme = t.theme;
+  S.ratio = t.ratio;
+  S.fontSize = t.fontSize;
+  S.speed = t.speed;
+  S.gutter = t.gutter;
+  S.chrome = t.chrome;
+  S.shadow = t.shadow;
+  S.follow = t.follow;
+  S.autoCam = t.autoCam;
+  S.auto = true;                       /* 模版自带自动编排 */
+  gradCache.key = '';
+  resetViewNow();
+  syncAllUI();
+  fitCanvas();
+  buildScene();
+  player.t = 0;
+  player.last = performance.now();
+  updatePlayIcon();
+  toast(blank
+    ? '已套用「' + t.label + '」并载入示例'
+    : '已套用「' + t.label + '」（保留你写的代码）');
+}
+
+function emptyTemplate() {
+  $("#code").value = '';
+  S.mode = 'auto';
+  S.reveal = ['type'];
+  S.move = ['still'];
+  S.theme = 'graphite';
+  S.ratio = 16 / 9;
+  S.fontSize = 15;
+  S.speed = 1;
+  S.gutter = true;
+  S.chrome = true;
+  S.shadow = true;
+  S.follow = false;
+  S.autoCam = false;
+  S.kf = { speed: [], zoom: [], rotX: [], rotY: [] };
+  S.auto = false;                      /* 空模版从零开始，不自动铺关键帧 */
+  tl.sel = null;
+  gradCache.key = '';
+  resetViewNow();
+  syncAllUI();
+  syncKfUI();
+  fitCanvas();
+  buildScene();
+  player.t = 0;
+  player.playing = false;
+  updatePlayIcon();
+  $("#code").focus();
+  toast('已切到空模版：粘贴代码即可开始');
+}
+
 /* 提示文案：选点状态优先，其次是自动编排是否在跑 */
 function syncKfUI() {
   const sel = tl.sel;
@@ -2892,6 +3032,18 @@ function fillSelects() {
   }
   buildChips('#revealChips', REVEAL, 'reveal', '至少保留一种出现方式');
   buildChips('#moveChips', MOVE, 'move', '至少保留一种镜头运动');
+
+  /* 模版：一次点击即套用整套外观与编排 */
+  const tplBox = $("#tplChips");
+  tplBox.innerHTML = '';
+  for (const t of TEMPLATES) {
+    const b = document.createElement('button');
+    b.className = 'tpl';
+    b.dataset.id = t.id;
+    b.innerHTML = `${t.label}<small>${t.hint}</small>`;
+    b.addEventListener('click', () => applyTemplate(t));
+    tplBox.appendChild(b);
+  }
 }
 
 let buildTimer = 0;
@@ -2996,6 +3148,8 @@ function bindUI() {
     buildScene();
     player.t = 0;
   });
+
+  $("#btnTplEmpty").addEventListener("click", emptyTemplate);
 
   $("#btnClear").addEventListener("click", () => {
     $("#code").value = '';
