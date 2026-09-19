@@ -12,15 +12,20 @@
 
 - **自动语言识别**：内置词法分析器，通过加权规则自动识别粘贴内容所属语言，也可手动指定。
 - **19 种语言语法着色**：JavaScript / TypeScript / Python / Java / Kotlin / C / C++ / C# / Go / Rust / Swift / PHP / Ruby / HTML / CSS / JSON / SQL / Shell / YAML，以及纯文本模式。着色由自研词法分析器完成，不依赖 highlight.js 等外部库。
-- **五种动画模式**，可多选并按顺序串联成一条时间轴：
-  | 模式 | 说明 |
-  | --- | --- |
-  | 打字机 | 逐字符输出 |
-  | 分段 | 按语法片段（token）输出 |
-  | 逐行 | 整行升起 |
-  | 3D 视角 | 空间旋转 |
-  | 平滑运镜 | 相机滞后跟随光标 |
-- **清晰渲染**：使用离屏 Canvas 按屏幕像素 1:1 绘制代码，再通过网格切片仿射映射做透视变换，因此 3D 旋转时文字依然清晰；搭配 3D 网格背景与模糊投影。
+- **两个维度自由组合**：出现方式 × 镜头运动，取笛卡尔积串联成播放序列（上限 12 段）。
+
+  | 出现方式 | 说明 | 镜头运动 | 说明 |
+  | --- | --- | --- | --- |
+  | 打字机 | 逐字符输出 | 静止 | 不运镜 |
+  | 逐词 | 按语法片段输出 | 推近 | 缓推 |
+  | 逐行 | 整行升起 | 拉远 | 缓收 |
+  | 语法块 | 按语法块出现 | 环绕 | 空间旋转 |
+  | 扫描擦除 | 横向擦开 | 倾斜 | 斜切入正 |
+  | 聚焦 | 由虚到实 | | |
+- **关键帧时间轴**：舞台下方是四通道关键帧编辑器 —— 速度（0.25~3×）、缩放（0.6~1.6×）、水平旋转与垂直旋转（±25°）。双击轨道空白加关键帧、拖动改时机与数值、双击关键帧删除、拖标尺定位；顶部片段条标出每段的「出现方式 · 镜头运动」。
+  - 速度轨道是全局时间轴曲线，但在每段打字区间内按面积归一化：变速只重新分配快慢，不会让哪段代码写不完。
+  - 缩放与旋转通道有关键帧时接管相机，没有关键帧的通道继续走镜头运动预设。
+- **清晰渲染**：离屏 Canvas 按设备像素 1:1 绘制代码，再交给 WebGL 做真透视贴图（透视插值由硬件保证，旋转时无拼接接缝）；无旋转且 1:1 时走单次 2D 贴图快路径，像素级锐利。搭配 3D 网格背景与投影轮廓模糊填充的阴影。
 - **中日韩文本与表情处理**：按双宽字符计算，光标与列定位不会错位。
 - **可调外观**：5 套配色主题（午夜石墨 / 深海回声 / 苔原 / 铅印 / 信号）、三种画幅比例（16:9 / 9:16 / 1:1）、速度与字号可调、行号与窗口边框可开关。
 - **时间轴可控**：播放条可拖拽定位；渲染是时间的纯函数，暂停与拖动后画面保持一致。
@@ -39,7 +44,7 @@
 ```bash
 git clone https://github.com/xkx121029/code-reel.git
 # 或
-git clone https://gitee.com/xkx121029/code-reel.git
+git clone https://gitee.com/xkx1029/code-reel.git
 ```
 
 ## 使用说明
@@ -47,10 +52,11 @@ git clone https://gitee.com/xkx121029/code-reel.git
 界面分为三栏：
 
 - **左栏 · 代码输入**：粘贴代码，右上角显示自动识别到的语言。支持「载入示例」「清空」，也可手动指定语言。
-- **中栏 · 预览舞台**：展示动画画面，下方是播放 / 暂停、重播与可拖拽的进度条。
+- **中栏 · 预览舞台**：展示动画画面，下方是关键帧时间轴与播放条（播放 / 暂停、重播、可拖拽的进度条）。
   - 快捷键：`空格` 播放 / 暂停，`R` 重播。
+  - 时间轴四条轨道自上而下为速度 / 缩放 / 水平旋转 / 垂直旋转；时间轴坐标与播放条共用同一个播放位置。
 - **右栏 · 参数**：
-  - 动画模式（可多选，按选择顺序串联）
+  - 出现方式与镜头运动（各自可多选，组合成播放序列）
   - 主题、画幅比例、字号、速度
   - 行号、窗口边框、投影开关
   - 导出按钮
@@ -99,8 +105,9 @@ code_video/
 
 - Paste code → automatic language detection → syntax highlighting, powered by a small hand-written lexer (no highlight.js / no CDN).
 - 19 languages supported, plus plain text.
-- Five animation modes (typewriter, token-by-token, line-by-line, 3D orbit, smooth camera dolly) that can be chained into a single timeline.
-- Crisp text at any rotation: code is drawn 1:1 on an offscreen canvas and perspective-mapped via grid-slice affine transforms.
+- Two independent dimensions combined into one playback sequence: reveal style (typewriter / word / line / syntax block / scan wipe / focus) × camera move (still / push in / pull out / orbit / tilt).
+- A keyframe timeline under the stage with four channels: speed (0.25–3× time remapping), zoom (0.6–1.6×), yaw and pitch (±25°). Double-click a track to add a keyframe, drag to retime or revalue it, double-click a keyframe to delete, drag the ruler to scrub.
+- Crisp text at any rotation: code is drawn at device-pixel scale on an offscreen canvas and perspective-mapped by WebGL (no slice seams), with a 2D fast path for unrotated 1:1 shots.
 - 5 color themes, 3 aspect ratios (16:9 / 9:16 / 1:1), adjustable speed and font size.
 - Export via `MediaRecorder` to WebM (Chrome / Edge work best).
 
@@ -109,6 +116,15 @@ Just open `index.html` in a modern browser. Licensed under the MIT License.
 ---
 
 ## 更新日志
+
+### 2026-09-19 · 关键帧时间轴
+
+- 新增舞台下方四通道关键帧时间轴：速度 / 缩放 / 水平旋转 / 垂直旋转，带时间标尺、片段条与播放头。
+- 交互：双击轨道加关键帧、拖动同时改时机与数值、双击关键帧删除、拖标尺定位并与播放条同步。
+- 速度轨道按片段打字区间做面积归一化：变速只重分配快慢，保证每段代码都在段内写完。
+- 缩放与旋转关键帧直接接管相机；无关键帧的通道继续走镜头运动预设。
+- 移除原先嵌在右栏的小型速度曲线编辑器，速度系统统一到时间轴。
+- 新增 3D 视角（拖拽转角度、滚轮调远近）、随光标跟随、自动运镜、曲线变速与投影阴影等能力。
 
 ### 2026-09-19 · 首次开源
 
