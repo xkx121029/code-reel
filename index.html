@@ -172,6 +172,19 @@ select:focus{border-color:var(--line-2)}
 .tl-tag{font-size:8.5px;fill:var(--dim)}
 .tl-val{font-size:9px;fill:var(--txt)}
 
+/* ---------- 关键帧数据面板 ---------- */
+.kf-row{display:flex;align-items:center;gap:8px;padding:5px 0}
+.kf-row label{color:var(--dim);font-size:12px;flex:0 0 32px}
+.kf-row .unit{font-family:var(--mono);font-size:10.5px;color:var(--dim-2);flex:0 0 12px}
+input[type=number]{
+  width:100%;min-width:0;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;
+  padding:6px 9px;outline:none;font-family:var(--mono);font-size:12px;color:var(--txt);
+  appearance:textfield;-moz-appearance:textfield;
+}
+input[type=number]:focus{border-color:var(--line-2)}
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+
 .field{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:5px 0}
 .field label{color:var(--dim);font-size:12px}
 .field .val{font-family:var(--mono);font-size:10.5px;color:var(--dim-2);min-width:42px;text-align:right}
@@ -321,6 +334,30 @@ canvas.dragging{cursor:grabbing}
         <span class="val" id="fontVal">15</span>
       </div>
       <p class="note" style="margin:9px 0 0">基础速度决定每段代码写多久；快慢节奏与镜头缩放、旋转请在舞台下方的<b>关键帧时间轴</b>里调。</p>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h"><h2>关 键 帧 数 据</h2><span class="note" id="kfDataNote">未选中</span></div>
+      <select id="kfCh"></select>
+      <div class="kf-row mt10">
+        <label>时刻</label>
+        <input type="number" id="kfT" step="0.05" min="0" value="0">
+        <span class="unit">s</span>
+      </div>
+      <div class="kf-row">
+        <label>数值</label>
+        <input type="number" id="kfV" step="0.05" value="1">
+        <span class="unit" id="kfUnit">×</span>
+      </div>
+      <div class="row mt10">
+        <button class="btn btn-ghost" id="btnKfPrev">上一帧</button>
+        <button class="btn btn-ghost" id="btnKfNext">下一帧</button>
+      </div>
+      <div class="row mt10">
+        <button class="btn btn-ghost" id="btnKfNew">新建点</button>
+        <button class="btn btn-ghost" id="btnKfDel">删除点</button>
+      </div>
+      <p class="note" style="margin:9px 0 0">在时间轴的曲线上点一下即可就地插点；这里可以直接输入时刻与数值，改完立即生效。</p>
     </div>
 
     <div class="sec">
@@ -1132,11 +1169,11 @@ const S = {
 
 /* 关键帧通道：值域与映射（速度用对数：上快下慢；其余线性） */
 const CH = [
-  { id: 'speed', label: '速度', min: 0.25, max: 3.0, log: true, def: 1, fmt: v => v.toFixed(2) + '×' },
-  { id: 'zoom', label: '缩放', min: 0.60, max: 1.6, log: false, def: 1, fmt: v => v.toFixed(2) + '×' },
+  { id: 'speed', label: '速度', min: 0.25, max: 3.0, log: true, def: 1, unit: '×', step: 0.05, fmt: v => v.toFixed(2) + '×' },
+  { id: 'zoom', label: '缩放', min: 0.60, max: 1.6, log: false, def: 1, unit: '×', step: 0.05, fmt: v => v.toFixed(2) + '×' },
   /* 旋转只给基准显示范围，实际范围随数据自动外扩（见 chSpan），硬上限是 ROT_MAX */
-  { id: 'rotY', label: '水平旋转', min: -40, max: 40, log: false, def: 0, auto: true, fmt: v => v.toFixed(1) + '°' },
-  { id: 'rotX', label: '垂直旋转', min: -40, max: 40, log: false, def: 0, auto: true, fmt: v => v.toFixed(1) + '°' },
+  { id: 'rotY', label: '水平旋转', min: -40, max: 40, log: false, def: 0, auto: true, unit: '°', step: 1, fmt: v => v.toFixed(1) + '°' },
+  { id: 'rotX', label: '垂直旋转', min: -40, max: 40, log: false, def: 0, auto: true, unit: '°', step: 1, fmt: v => v.toFixed(1) + '°' },
 ];
 const DEG = Math.PI / 180;
 const KF_HIT = 9;             /* 关键帧命中半径（CSS 像素） */
@@ -2050,6 +2087,7 @@ function scrubTo(x, e) {
   player.t = clamp(t, 0, scene.total);
   $("#scrub").value = String(Math.round(player.t * 1000));
   if (tl.sel) { tl.sel = null; syncKfUI(); tl.dirty = true; }   /* 定位与被选中的落点不再同步 */
+  else kfDataSync();
   updatePlayhead();
 }
 
@@ -2093,18 +2131,36 @@ function bindTimeline() {
     if (i < 0) return;
     const j = tlHitKey(i, p.x, p.y);
     if (j < 0) {
-      /* 空白处按下 = 选一个时刻当落点（真正写入发生在拖完画面视角时） */
+      const chId = CH[i].id;
       let t = clamp(tlT(p.x), 0, scene.total);
       if (snapOn(e)) {
-        const st = snapTimeAt(p.x, CH[i].id, true);
+        const st = snapTimeAt(p.x, chId, true);
         if (st != null) t = clamp(st, 0, scene.total);
       }
+      /* 按在曲线上：就地插一个关键帧，值取曲线当前值，形状不变 */
+      if (S.kf[chId].length && Math.abs(p.y - tlY(i, kfValue(chId, t, CH[i].def))) <= 8) {
+        const k = setKfAt(chId, t, kfValue(chId, t, CH[i].def));
+        tl.sel = { t: k.t, ch: chId, k };
+        player.playing = false;
+        player.t = k.t;
+        $("#scrub").value = String(Math.round(player.t * 1000));
+        syncKfUI();
+        tl.dirty = true;
+        drawTimeline();
+        toast('已在曲线上新建关键帧 ' + k.t.toFixed(2) + 's');
+        e.preventDefault();
+        return;
+      }
+      /* 否则：空白处按下 = 选一个时刻当落点（真正写入发生在拖完画面视角时） */
       selectAt(t, null, null);
       e.preventDefault();
       return;
     }
     mode = 'key';
-    tl.drag = { ch: CH[i].id, idx: j, k: S.kf[CH[i].id][j], st: false, sv: false };
+    const kk = S.kf[CH[i].id][j];
+    tl.drag = { ch: CH[i].id, idx: j, k: kk, st: false, sv: false };
+    tl.sel = { t: kk.t, ch: CH[i].id, k: kk };   /* 按到哪个点就编辑哪个点 */
+    syncKfUI();
     try { svg.setPointerCapture(e.pointerId); } catch (err) { }
     drawTimeline();
     e.preventDefault();
@@ -2138,7 +2194,9 @@ function bindTimeline() {
     const arr = S.kf[ch];
     arr.sort((a, b) => a.t - b.t);
     tl.drag.idx = arr.indexOf(k);
+    tl.sel = { t: k.t, ch, k };      /* 拖到哪就选中哪，右栏数据面板同步跟随 */
     drawTimeline();
+    kfDataSync();
     e.preventDefault();
   });
 
@@ -2245,6 +2303,134 @@ function syncAllUI() {
   updateViewLabel();
 }
 
+/* ---------------- 12.3 关键帧数据面板 ----------------
+   与时间轴共用同一份选中状态：这里能看精确数值、能直接手输，
+   也能在播放头处新建、逐帧跳转、删除。 */
+function kfNum(el, txt) {
+  /* 正在输入的那个框不要被刷新打断 */
+  if (document.activeElement === el) return;
+  if (el.value !== txt) el.value = txt;
+}
+
+function kfDataSync() {
+  const chSel = $("#kfCh");
+  const chId = chSel.value || CH[0].id;
+  const c = CH.find(x => x.id === chId) || CH[0];
+  const s = chSpan(chId);
+  const tIn = $("#kfT"), vIn = $("#kfV");
+  tIn.max = Math.max(0.05, scene.total).toFixed(2);
+  vIn.min = String(s.min);
+  vIn.max = String(s.max);
+  vIn.step = String(c.step || 0.05);
+  $("#kfUnit").textContent = c.unit || '';
+  const k = tl.sel && tl.sel.k && tl.sel.ch === chId ? tl.sel.k : null;
+  if (k) {
+    $("#kfDataNote").textContent = '已选中 · 可改';
+    kfNum(tIn, k.t.toFixed(2));
+    kfNum(vIn, k.v.toFixed(c.log || !c.auto ? 2 : 1));
+  } else {
+    $("#kfDataNote").textContent = scene.ready ? '未选中' : '等待输入';
+    kfNum(tIn, player.t.toFixed(2));
+    kfNum(vIn, kfValue(chId, player.t, c.def).toFixed(c.log || !c.auto ? 2 : 1));
+  }
+}
+
+function bindKfData() {
+  const chSel = $("#kfCh");
+  chSel.innerHTML = '';
+  for (const c of CH) {
+    const o = document.createElement('option');
+    o.value = c.id;
+    o.textContent = c.label;
+    chSel.appendChild(o);
+  }
+  chSel.value = CH[0].id;
+
+  /* 定位到某个键：同步播放头与选中态 */
+  const goto = k => {
+    tl.sel = { t: k.t, ch: chSel.value, k };
+    player.playing = false;
+    player.t = k.t;
+    $("#scrub").value = String(Math.round(player.t * 1000));
+    syncKfUI();
+    tl.dirty = true;
+    drawTimeline();
+  };
+
+  chSel.addEventListener("change", () => {
+    /* 换通道时试着选中该通道里离播放头最近的键 */
+    const near = S.kf[chSel.value].find(k => Math.abs(k.t - player.t) < 0.3);
+    if (near) goto(near);
+    else { tl.sel = null; syncKfUI(); tl.dirty = true; drawTimeline(); }
+    kfDataSync();
+  });
+
+  $("#kfT").addEventListener("input", () => {
+    const k = tl.sel && tl.sel.k;
+    if (!k) { kfDataSync(); return; }
+    const v = parseFloat($("#kfT").value);
+    if (!isFinite(v)) return;
+    k.t = clamp(v, 0, Math.max(0.05, scene.total));
+    k.man = true;
+    const arr = S.kf[tl.sel.ch];
+    arr.sort((a, b) => a.t - b.t);
+    tl.sel.t = k.t;
+    player.playing = false;
+    player.t = k.t;
+    $("#scrub").value = String(Math.round(player.t * 1000));
+    tl.dirty = true;
+    drawTimeline();
+  });
+
+  $("#kfV").addEventListener("input", () => {
+    const k = tl.sel && tl.sel.k;
+    if (!k) { kfDataSync(); return; }
+    const v = parseFloat($("#kfV").value);
+    if (!isFinite(v)) return;
+    const c = CH.find(x => x.id === tl.sel.ch);
+    k.v = c.auto ? rotClamp(v) : clamp(v, c.min, c.max);
+    k.man = true;
+    tl.dirty = true;
+    drawTimeline();
+  });
+
+  $("#btnKfNew").addEventListener("click", () => {
+    if (!scene.ready) { toast('先输入代码'); return; }
+    const chId = chSel.value, c = CH.find(x => x.id === chId);
+    const t = clamp(parseFloat($("#kfT").value) || 0, 0, Math.max(0.05, scene.total));
+    const raw = parseFloat($("#kfV").value);
+    const v = isFinite(raw) ? raw : kfValue(chId, t, c.def);
+    const k = setKfAt(chId, t, c.auto ? rotClamp(v) : clamp(v, c.min, c.max));
+    goto(k);
+    toast('已新建关键帧 ' + k.t.toFixed(2) + 's');
+  });
+
+  $("#btnKfDel").addEventListener("click", () => {
+    const sel = tl.sel;
+    if (!sel || !sel.k) { toast('先选中一个关键帧'); return; }
+    const arr = S.kf[sel.ch];
+    const i = arr.indexOf(sel.k);
+    if (i >= 0) arr.splice(i, 1);
+    tl.sel = null;
+    syncKfUI();
+    tl.dirty = true;
+    drawTimeline();
+    toast('已删除该关键帧');
+  });
+
+  const hop = dir => {
+    const chId = chSel.value, arr = S.kf[chId];
+    if (!arr.length) { toast('该通道还没有关键帧'); return; }
+    const cur = tl.sel && tl.sel.k ? tl.sel.k.t : player.t;
+    let cand = null;
+    if (dir > 0) cand = arr.find(k => k.t > cur + 1e-6);
+    else for (let i = arr.length - 1; i >= 0; i--) if (arr[i].t < cur - 1e-6) { cand = arr[i]; break; }
+    goto(cand || (dir > 0 ? arr[0] : arr[arr.length - 1]));
+  };
+  $("#btnKfPrev").addEventListener("click", () => hop(-1));
+  $("#btnKfNext").addEventListener("click", () => hop(1));
+}
+
 /* 视角立刻归位（不走补间动画，套模版时不该看到旧角度） */
 function resetViewNow() {
   viewTween = null;
@@ -2324,6 +2510,7 @@ function syncKfUI() {
       ? (tpl ? '「' + tpl.label + '」已就绪 · ' : '自动编排已就绪 · ')
         + '双击轨道加关键帧 · 拖动改时机与数值（自动吸附）· 拖动画布写入旋转'
       : '自动编排已停止（点「重新编排」恢复）· 轨道仍可手动打点');
+  kfDataSync();                        /* 右栏数据面板跟随同一个选中状态 */
 }
 /* ---------------- 9. 相机与投影 ---------------- */
 /* 光标游标（连续）：单位游标取整后，在相邻两个单位位置之间线性插值。
@@ -3247,6 +3434,7 @@ function bindUI() {
     toast(S.snap ? '吸附已开启' : '吸附已关闭（按住 Alt 亦可临时关闭）');
   });
   bindTimeline();
+  bindKfData();
   syncKfUI();
 
   $("#btnPlay").addEventListener("click", () => {
@@ -3268,6 +3456,7 @@ function bindUI() {
     player.playing = false;
     updatePlayIcon();
     player.t = clamp(parseInt(e.target.value, 10) / 1000, 0, scene.total);
+    kfDataSync();                      /* 未选中时面板跟着播放头走 */
   });
 
   $("#btnExport").addEventListener("click", exportVideo);
