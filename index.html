@@ -1,0 +1,1879 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Code Reel · 代码动画生成器</title>
+<style>
+:root{
+  --bg:#0c0c0d;
+  --panel:#131315;
+  --panel-2:#17171a;
+  --line:#26262b;
+  --line-2:#33333a;
+  --txt:#e6e5e1;
+  --dim:#8b8b91;
+  --dim-2:#63636b;
+  --accent:#e8663a;
+  --accent-dim:#8f4327;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --mono:"JetBrains Mono","Cascadia Mono","Cascadia Code",Consolas,"SF Mono",Menlo,monospace;
+  --r:10px;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;background:var(--bg);color:var(--txt);
+  font-family:var(--sans);font-size:13px;line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+  display:flex;flex-direction:column;overflow:hidden;
+}
+button,input,select,textarea{font-family:inherit;font-size:inherit;color:inherit}
+::selection{background:var(--accent);color:#fff}
+
+/* ---------- 顶部 ---------- */
+header{
+  height:54px;flex:0 0 54px;display:flex;align-items:center;gap:16px;
+  padding:0 18px;border-bottom:1px solid var(--line);background:var(--panel);
+}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand b{
+  font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.22em;
+}
+.brand span{color:var(--dim-2);font-size:11px;letter-spacing:.06em}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.lang-badge{
+  display:flex;align-items:center;gap:8px;
+  border:1px solid var(--line-2);border-radius:999px;padding:4px 12px 4px 9px;
+  font-family:var(--mono);font-size:11px;color:var(--dim);letter-spacing:.04em;
+}
+.lang-badge i{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:0 0 6px}
+.lang-badge b{color:var(--txt);font-weight:600}
+
+/* ---------- 主布局 ---------- */
+main{
+  flex:1;min-height:0;display:grid;
+  grid-template-columns:340px minmax(320px,1fr) 306px;
+}
+.col{min-width:0;min-height:0;display:flex;flex-direction:column;overflow:auto}
+.col + .col{border-left:1px solid var(--line)}
+.col-stage{background:#0a0a0b;overflow:hidden}
+
+.sec{padding:14px 16px;border-bottom:1px solid var(--line)}
+.sec:last-child{border-bottom:0}
+.sec-h{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;
+}
+.sec-h h2{
+  margin:0;font-family:var(--mono);font-size:10px;font-weight:600;
+  letter-spacing:.24em;color:var(--dim-2);text-transform:uppercase;
+}
+.note{font-family:var(--mono);font-size:10px;color:var(--dim-2);letter-spacing:.04em}
+
+/* ---------- 控件 ---------- */
+textarea{
+  width:100%;height:238px;resize:vertical;background:var(--panel-2);
+  border:1px solid var(--line);border-radius:var(--r);padding:11px 12px;
+  font-family:var(--mono);font-size:12px;line-height:1.66;color:var(--txt);
+  outline:none;transition:border-color .16s ease;
+}
+textarea:focus{border-color:var(--line-2)}
+textarea::placeholder{color:var(--dim-2)}
+
+select{
+  width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;
+  padding:7px 9px;outline:none;cursor:pointer;appearance:none;
+  background-image:linear-gradient(45deg,transparent 50%,var(--dim-2) 50%),linear-gradient(135deg,var(--dim-2) 50%,transparent 50%);
+  background-position:calc(100% - 15px) 52%,calc(100% - 10px) 52%;
+  background-size:5px 5px,5px 5px;background-repeat:no-repeat;
+}
+select:focus{border-color:var(--line-2)}
+
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  background:var(--panel-2);border:1px solid var(--line);border-radius:8px;
+  padding:7px 12px;cursor:pointer;color:var(--txt);
+  transition:background .15s ease,border-color .15s ease,transform .12s ease;
+  white-space:nowrap;
+}
+.btn:hover{background:#1f1f23;border-color:var(--line-2)}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.btn-primary:hover{background:#f07246;border-color:#f07246}
+.btn-ghost{background:transparent}
+.row{display:flex;gap:8px}
+.row > *{flex:1}
+.mt10{margin-top:10px}
+
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{
+  position:relative;display:flex;align-items:center;gap:7px;
+  border:1px solid var(--line);border-radius:999px;background:transparent;
+  padding:6px 12px 6px 10px;cursor:pointer;color:var(--dim);
+  transition:color .15s ease,border-color .15s ease,background .15s ease;
+}
+.chip:before{
+  content:"";width:5px;height:5px;border-radius:50%;background:var(--line-2);
+  transition:background .15s ease;
+}
+.chip:hover{color:var(--txt);border-color:var(--line-2)}
+.chip[aria-pressed="true"]{color:var(--txt);border-color:var(--accent-dim);background:rgba(232,102,58,.08)}
+.chip[aria-pressed="true"]:before{background:var(--accent)}
+.chip small{color:var(--dim-2);font-size:10px;font-family:var(--mono)}
+
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{
+  flex:1;background:transparent;border:0;padding:6px 0;cursor:pointer;color:var(--dim);
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;
+  transition:background .15s ease,color .15s ease;
+}
+.seg button + button{border-left:1px solid var(--line)}
+.seg button:hover{color:var(--txt)}
+.seg button[aria-pressed="true"]{background:var(--panel-2);color:var(--txt)}
+
+.field{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:5px 0}
+.field label{color:var(--dim);font-size:12px}
+.field .val{font-family:var(--mono);font-size:10.5px;color:var(--dim-2);min-width:42px;text-align:right}
+input[type=range]{flex:1;accent-color:var(--accent);height:18px;cursor:pointer}
+
+.switch{display:flex;align-items:center;justify-content:space-between;padding:5px 0;cursor:pointer;user-select:none}
+.switch span{color:var(--dim);font-size:12px}
+.switch input{appearance:none;width:34px;height:19px;border-radius:999px;background:#26262b;position:relative;cursor:pointer;transition:background .18s ease;flex:0 0 34px}
+.switch input:after{content:"";position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:#7d7d85;transition:transform .18s cubic-bezier(.22,1,.36,1),background .18s ease}
+.switch input:checked{background:var(--accent-dim)}
+.switch input:checked:after{transform:translateX(15px);background:var(--accent)}
+
+/* ---------- 舞台 ---------- */
+.stage-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:18px}
+.stage-inner{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%}
+canvas{display:block;border-radius:12px;background:#0a0a0b}
+
+.playbar{
+  flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:10px 16px;
+  border-top:1px solid var(--line);background:var(--panel);
+}
+.playbar .btn-icon{width:34px;height:34px;padding:0;border-radius:50%}
+.playbar .btn-icon svg{width:14px;height:14px;fill:currentColor}
+.time{font-family:var(--mono);font-size:11px;color:var(--dim-2);letter-spacing:.03em;white-space:nowrap}
+.time b{color:var(--txt);font-weight:600}
+.playbar input[type=range]{flex:1}
+.cliptag{
+  font-family:var(--mono);font-size:10px;letter-spacing:.12em;color:var(--accent);
+  border:1px solid var(--accent-dim);border-radius:999px;padding:3px 10px;white-space:nowrap;
+  text-transform:uppercase;
+}
+
+/* ---------- 溢出提示 ---------- */
+.toast{
+  position:fixed;left:50%;bottom:26px;transform:translate(-50%,14px);
+  background:var(--panel-2);border:1px solid var(--line-2);border-radius:8px;
+  padding:9px 16px;font-size:12px;opacity:0;pointer-events:none;
+  transition:opacity .2s ease,transform .2s cubic-bezier(.22,1,.36,1);z-index:50;
+}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+
+/* ---------- 入场动效（自下而上，无横向/缩放） ---------- */
+@keyframes riseIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.rise{animation:riseIn .32s cubic-bezier(.22,1,.36,1) both}
+.header-rise{animation:riseIn .3s cubic-bezier(.22,1,.36,1) both}
+
+@media (max-width:1180px){
+  body{overflow:auto;height:auto}
+  main{grid-template-columns:1fr;display:block}
+  .col + .col{border-left:0;border-top:1px solid var(--line)}
+  .col-stage{height:auto}
+  .stage-wrap{height:auto;min-height:280px}
+  .stage-inner{height:auto}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <b>CODE&nbsp;REEL</b>
+    <span>代码动画生成器</span>
+  </div>
+  <div class="hdr-right">
+    <div class="lang-badge" id="langBadge"><i></i><span>识别</span><b>—</b></div>
+  </div>
+</header>
+
+<main>
+  <!-- 左：输入 -->
+  <section class="col">
+    <div class="sec">
+      <div class="sec-h">
+        <h2>源 代 码</h2>
+        <span class="note" id="statNote">0 行 · 0 字符</span>
+      </div>
+      <textarea id="code" spellcheck="false" placeholder="在此粘贴代码…&#10;&#10;支持 JS / TS / Python / Java / Kotlin / C / C++ / C# / Go / Rust / Swift / PHP / Ruby / HTML / CSS / JSON / SQL / Shell / YAML&#10;粘贴后自动识别语言并着色。"></textarea>
+      <div class="row mt10">
+        <select id="langSel"></select>
+      </div>
+      <div class="row mt10">
+        <button class="btn btn-ghost" id="btnSample">载入示例</button>
+        <button class="btn btn-ghost" id="btnClear">清空</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 中：舞台 -->
+  <section class="col col-stage">
+    <div class="stage-wrap">
+      <div class="stage-inner" id="stageInner">
+        <canvas id="cv"></canvas>
+      </div>
+    </div>
+    <div class="playbar">
+      <button class="btn btn-primary btn-icon" id="btnPlay" title="播放 / 暂停">
+        <svg id="icoPlay" viewBox="0 0 16 16"><path d="M3 1.7v12.6c0 .5.55.8.97.53l9.6-6.3a.63.63 0 0 0 0-1.06l-9.6-6.3A.63.63 0 0 0 3 1.7z"/></svg>
+      </button>
+      <button class="btn btn-icon" id="btnRestart" title="重播">
+        <svg viewBox="0 0 16 16"><path d="M8 2.2V.6L4.6 3.3 8 6V4.2a3.8 3.8 0 1 1-3.8 3.8H2.4A5.6 5.6 0 1 0 8 2.2z"/></svg>
+      </button>
+      <span class="cliptag" id="clipTag">—</span>
+      <input type="range" id="scrub" min="0" max="1000" value="0" step="1">
+      <span class="time" id="timeLabel"><b>0.0</b> / 0.0 s</span>
+    </div>
+  </section>
+
+  <!-- 右：控制 -->
+  <section class="col">
+    <div class="sec">
+      <div class="sec-h"><h2>动 画 模 式</h2><span class="note">可多选</span></div>
+      <div class="chips" id="modeChips"></div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h"><h2>节 奏</h2></div>
+      <div class="field">
+        <label>速度</label>
+        <input type="range" id="speed" min="40" max="260" value="100" step="5">
+        <span class="val" id="speedVal">1.0×</span>
+      </div>
+      <div class="field">
+        <label>字号</label>
+        <input type="range" id="fontSize" min="11" max="24" value="15" step="1">
+        <span class="val" id="fontVal">15</span>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h"><h2>画 面</h2></div>
+      <select id="themeSel"></select>
+      <div class="seg mt10" id="ratioSeg">
+        <button data-ratio="16/9" aria-pressed="true">16 : 9</button>
+        <button data-ratio="9/16" aria-pressed="false">9 : 16</button>
+        <button data-ratio="1/1" aria-pressed="false">1 : 1</button>
+      </div>
+      <label class="switch mt10"><span>行号</span><input type="checkbox" id="optGutter" checked></label>
+      <label class="switch"><span>窗口边框</span><input type="checkbox" id="optChrome" checked></label>
+      <label class="switch"><span>投影与网格</span><input type="checkbox" id="optShadow" checked></label>
+    </div>
+
+    <div class="sec">
+      <div class="sec-h"><h2>输 出</h2><span class="note" id="durNote">—</span></div>
+      <button class="btn btn-primary" id="btnExport" style="width:100%">导出视频（WebM）</button>
+      <p class="note mt10" style="margin-bottom:0">按当前模式顺序录制为一段视频，实时录制，请勿切换窗口。</p>
+    </div>
+  </section>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* =========================================================
+   Code Reel · 代码动画生成器
+   单文件实现：多语言词法着色 + 自动识别 + Canvas 3D 动画渲染
+   ========================================================= */
+
+/* ---------------- 0. 基础工具 ---------------- */
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const lerp = (a, b, t) => a + (b - a) * t;
+const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+const easeInOutCubic = t => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+const $ = s => document.querySelector(s);
+const MONO = '"JetBrains Mono","Cascadia Mono","Cascadia Code",Consolas,"SF Mono",Menlo,monospace';
+
+function rr(g, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
+function toast(msg) {
+  const el = $("#toast");
+  el.textContent = msg;
+  el.classList.add("on");
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove("on"), 2200);
+}
+
+/* ---------------- 1. 语言定义 ---------------- */
+function setOf(str) { return new Set(str.split(/\s+/).filter(Boolean)); }
+
+const DEFAULT_OPS = ['>>>=', '===', '!==', '**=', '<<=', '>>=', '...', '=>', '==', '!=', '<=', '>=',
+  '&&', '||', '??', '?.', '++', '--', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '**',
+  '::', '->', '<<', '>>', ':=', '!=', '..', '+', '-', '*', '/', '%', '<', '>', '&', '|', '^',
+  '!', '~', '?', '=', '@', '#'];
+
+const C_LIKE = {
+  line: ['//'], block: [['/*', '*/']], pp: true, annot: true, charLit: true,
+  strings: [{ o: '`', c: '`', t: 'str', esc: true, multi: true },
+            { o: '"', c: '"', t: 'str', esc: true },
+            { o: "'", c: "'", t: 'str', esc: true }],
+};
+
+const LANGS = {
+  plain: { label: '纯文本', ext: 'txt', line: [], block: [], strings: [] },
+
+  javascript: Object.assign({}, C_LIKE, {
+    label: 'JavaScript', ext: 'js',
+    kw: setOf('var let const function return if else for while do switch case default break continue new delete typeof instanceof in of class extends super this null undefined true false async await yield try catch finally throw import export from static get set void with debugger'),
+    type: setOf('Array Object String Number Boolean Symbol Promise Map Set WeakMap WeakSet Date RegExp Error JSON Math Reflect Proxy BigInt Intl'),
+    builtin: setOf('console document window globalThis process require module exports setTimeout setInterval fetch alert localStorage'),
+  }),
+  typescript: Object.assign({}, C_LIKE, {
+    label: 'TypeScript', ext: 'ts', capType: true,
+    kw: setOf('var let const function return if else for while do switch case default break continue new delete typeof instanceof in of class extends super this null undefined true false async await yield try catch finally throw import export from static get set void interface type enum implements declare namespace readonly public private protected abstract as satisfies keyof infer never unknown any string number boolean'),
+    type: setOf('Array Object String Number Boolean Symbol Promise Map Set Record Partial Readonly Pick Omit Exclude Extract Date RegExp Error JSON Math'),
+    builtin: setOf('console document window process require module exports setTimeout setInterval fetch'),
+  }),
+  python: {
+    label: 'Python', ext: 'py', line: ['#'], block: [], annot: true, capType: true,
+    strings: [{ o: '"""', c: '"""', t: 'str', esc: true, multi: true },
+              { o: "'''", c: "'''", t: 'str', esc: true, multi: true },
+              { o: '"', c: '"', t: 'str', esc: true },
+              { o: "'", c: "'", t: 'str', esc: true }],
+    kw: setOf('def class return if elif else for while in not and or is None True False import from as pass break continue with try except finally raise lambda yield global nonlocal assert del async await match case print self'),
+    type: setOf('int float str bool list dict set tuple bytes object type range len enumerate zip map filter sum min max sorted open isinstance super'),
+    builtin: setOf('print len range enumerate zip open int str float list dict set tuple type isinstance super'),
+  },
+  java: Object.assign({}, C_LIKE, {
+    label: 'Java', ext: 'java', capType: true,
+    kw: setOf('public private protected static final abstract synchronized class interface enum extends implements new return if else for while do switch case default break continue try catch finally throw throws this super null true false void package import instanceof assert record sealed var'),
+    type: setOf('String Integer Long Double Float Boolean Character Object List Map Set ArrayList HashMap HashSet Optional Stream Arrays Collections System Math Exception RuntimeException Thread'),
+    builtin: setOf('System Math Arrays Collections String Integer'),
+  }),
+  kotlin: Object.assign({}, C_LIKE, {
+    label: 'Kotlin', ext: 'kt', capType: true, pp: false,
+    strings: [{ o: '"""', c: '"""', t: 'str', esc: false, multi: true },
+              { o: '"', c: '"', t: 'str', esc: true },
+              { o: "'", c: "'", t: 'str', esc: true }],
+    kw: setOf('fun val var class object interface data sealed enum when if else for while do return break continue in is as null true false this super override open private public internal protected abstract companion const lateinit suspend by init constructor try catch finally throw import package typealias where reified inline operator infix'),
+    type: setOf('Int Long Double Float Boolean String Char Any Unit List MutableList Map MutableMap Set Array Nothing'),
+    builtin: setOf('println print listOf mapOf setOf mutableListOf mutableMapOf require check error let apply run also with'),
+  }),
+  c: Object.assign({}, C_LIKE, {
+    label: 'C', ext: 'c',
+    kw: setOf('int char float double void long short unsigned signed struct union enum typedef static extern const volatile register sizeof return if else for while do switch case default break continue goto inline NULL true false'),
+    type: setOf('size_t uint8_t uint16_t uint32_t uint64_t int8_t int16_t int32_t int64_t FILE bool'),
+    builtin: setOf('printf scanf malloc free calloc realloc memcpy memset strlen strcpy fopen fclose fgets fprintf sprintf'),
+  }),
+  cpp: Object.assign({}, C_LIKE, {
+    label: 'C++', ext: 'cpp', capType: true,
+    kw: setOf('int char float double void long short unsigned signed struct class union enum typedef static extern const volatile register sizeof return if else for while do switch case default break continue goto inline template typename namespace using public private protected virtual override final new delete this nullptr true false try catch throw auto constexpr noexcept operator explicit friend mutable'),
+    type: setOf('string vector map unordered_map set unordered_set pair tuple shared_ptr unique_ptr weak_ptr size_t string_view optional variant function'),
+    builtin: setOf('std cout cin endl printf malloc memcpy make_shared make_unique move forward sort find'),
+  }),
+  csharp: Object.assign({}, C_LIKE, {
+    label: 'C#', ext: 'cs', capType: true,
+    kw: setOf('using namespace class struct interface enum public private protected internal static readonly const virtual override abstract sealed new return if else for foreach while do switch case default break continue try catch finally throw this base null true false void var async await yield get set record partial where'),
+    type: setOf('string int long double float bool char object byte decimal List Dictionary IEnumerable Task Exception Console Array'),
+    builtin: setOf('Console Math String Convert Enumerable'),
+  }),
+  go: {
+    label: 'Go', ext: 'go', line: ['//'], block: [['/*', '*/']], capType: true,
+    strings: [{ o: '`', c: '`', t: 'str', esc: false, multi: true },
+              { o: '"', c: '"', t: 'str', esc: true },
+              { o: "'", c: "'", t: 'str', esc: true }],
+    kw: setOf('package import func var const type struct interface map chan go defer select range return if else for switch case default break continue goto fallthrough nil true false make new len cap append panic recover'),
+    type: setOf('int int8 int16 int32 int64 uint uint8 uint16 uint32 uint64 float32 float64 string bool byte rune error any'),
+    builtin: setOf('fmt println printf errorf make new len cap append panic recover'),
+  },
+  rust: {
+    label: 'Rust', ext: 'rs', line: ['//'], block: [['/*', '*/']], annot: true, charLit: true, capType: true,
+    strings: [{ o: 'r#"', c: '"#', t: 'str', esc: false, multi: true },
+              { o: '"', c: '"', t: 'str', esc: true },
+              { o: "'", c: "'", t: 'str', esc: true }],
+    kw: setOf('fn let mut const static struct enum trait impl for while loop match if else return break continue use mod pub crate super self Self where as in ref move async await dyn unsafe extern type'),
+    type: setOf('i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 usize isize f32 f64 bool char str String Vec Option Result Box Rc Arc HashMap HashSet'),
+    builtin: setOf('println print format vec panic assert Some None Ok Err'),
+  },
+  swift: Object.assign({}, C_LIKE, {
+    label: 'Swift', ext: 'swift', capType: true, pp: false,
+    kw: setOf('func var let class struct enum protocol extension import return if else for while repeat switch case default break continue guard defer init deinit self super nil true false try catch throw throws as is in where public private internal fileprivate open static final override mutating lazy weak unowned async await some any'),
+    type: setOf('Int Double Float String Bool Character Array Dictionary Set Optional Result Any AnyObject Void Error'),
+    builtin: setOf('print dump min max abs map filter reduce'),
+  }),
+  php: {
+    label: 'PHP', ext: 'php', line: ['//', '#'], block: [['/*', '*/']], dollar: true, capType: true,
+    strings: [{ o: '"', c: '"', t: 'str', esc: true, multi: true },
+              { o: "'", c: "'", t: 'str', esc: true, multi: true }],
+    kw: setOf('function class extends implements public private protected static return if else elseif for foreach while do switch case default break continue new echo print try catch finally throw use namespace require require_once include null true false array as instanceof const abstract final'),
+    type: setOf('int string float bool array object callable void mixed iterable self parent'),
+    builtin: setOf('count array_map array_filter implode explode json_encode json_decode var_dump print_r strlen substr str_replace'),
+  },
+  ruby: {
+    label: 'Ruby', ext: 'rb', line: ['#'], block: [['=begin', '=end']], capType: true,
+    strings: [{ o: '"', c: '"', t: 'str', esc: true },
+              { o: "'", c: "'", t: 'str', esc: true }],
+    kw: setOf('def end class module if elsif else unless while until for do then begin rescue ensure return yield break next nil true false self super and or not require require_relative attr_accessor attr_reader attr_writer puts print lambda proc new raise include extend'),
+    type: setOf('String Integer Float Array Hash Symbol Range Proc Class Module Time'),
+    builtin: setOf('puts print p gets rand sort map select reject each reduce'),
+  },
+  html: { label: 'HTML', ext: 'html', custom: 'html' },
+  css: {
+    label: 'CSS', ext: 'css', line: [], block: [['/*', '*/']], propNext: true,
+    strings: [{ o: '"', c: '"', t: 'str', esc: true }, { o: "'", c: "'", t: 'str', esc: true }],
+    kw: setOf('important from to media supports keyframes import charset layer'),
+    type: setOf('none auto inherit initial unset flex grid block inline absolute relative fixed sticky hidden visible transparent currentColor'),
+    builtin: setOf(''),
+  },
+  json: {
+    label: 'JSON', ext: 'json', line: [], block: [], strKey: true,
+    strings: [{ o: '"', c: '"', t: 'str', esc: true }],
+    kw: setOf('true false null'),
+    type: setOf(''), builtin: setOf(''),
+  },
+  sql: {
+    label: 'SQL', ext: 'sql', line: ['--'], block: [['/*', '*/']], ciKw: true,
+    strings: [{ o: "'", c: "'", t: 'str', esc: false, multi: true },
+              { o: '"', c: '"', t: 'str', esc: false }],
+    kw: setOf('select from where insert into values update set delete create table alter drop index view join left right inner outer on group by order having limit offset distinct as and or not null is in between like exists union all case when then else end primary key foreign references default unique auto_increment count sum avg min max'),
+    type: setOf('int varchar char text date datetime timestamp decimal float boolean serial bigint uuid json'),
+    builtin: setOf('count sum avg min max coalesce now'),
+  },
+  shell: {
+    label: 'Shell', ext: 'sh', line: ['#'], block: [], dollar: true,
+    strings: [{ o: '"', c: '"', t: 'str', esc: true },
+              { o: "'", c: "'", t: 'str', esc: false }],
+    kw: setOf('if then else elif fi for while do done case esac function in return exit export local readonly source echo printf set unset read shift trap break continue'),
+    type: setOf(''),
+    builtin: setOf('echo printf cd ls cp mv rm mkdir cat grep sed awk curl git npm node docker sudo chmod chown touch'),
+  },
+  yaml: {
+    label: 'YAML', ext: 'yaml', line: ['#'], block: [], propNext: true,
+    strings: [{ o: '"', c: '"', t: 'str', esc: true }, { o: "'", c: "'", t: 'str', esc: true }],
+    kw: setOf('true false null yes no on off'),
+    type: setOf(''), builtin: setOf(''),
+  },
+};
+
+/* 语法示例 */
+const SAMPLES = {
+  javascript: `// 快速排序：分治 + 原地分区
+function quickSort(arr, lo = 0, hi = arr.length - 1) {
+  if (lo >= hi) return arr;
+  const pivot = arr[hi];
+  let i = lo;
+  for (let j = lo; j < hi; j++) {
+    if (arr[j] < pivot) [arr[i++], arr[j]] = [arr[j], arr[i]];
+  }
+  [arr[i], arr[hi]] = [arr[hi], arr[i]];
+  quickSort(arr, lo, i - 1);
+  quickSort(arr, i + 1, hi);
+  return arr;
+}
+
+console.log(quickSort([5, 2, 9, 1, 7, 3]));`,
+  typescript: `interface Task {
+  id: number;
+  title: string;
+  done: boolean;
+}
+
+export function pending(tasks: Task[]): Task[] {
+  return tasks.filter((t) => !t.done);
+}
+
+const list: Task[] = await fetchTodos();
+console.log(pending(list).length);`,
+  python: `import math
+
+def primes(limit: int):
+    """埃拉托斯特尼筛法"""
+    flags = [True] * (limit + 1)
+    flags[0] = flags[1] = False
+    for i in range(2, int(math.sqrt(limit)) + 1):
+        if flags[i]:
+            for j in range(i * i, limit + 1, i):
+                flags[j] = False
+    return [n for n, ok in enumerate(flags) if ok]
+
+print(primes(50))`,
+  java: `package demo;
+
+import java.util.stream.IntStream;
+
+public class Sum {
+    public static void main(String[] args) {
+        int total = IntStream.rangeClosed(1, 100)
+                .filter(n -> n % 3 == 0)
+                .sum();
+        System.out.println("结果 = " + total);
+    }
+}`,
+  kotlin: `data class User(val name: String, val age: Int)
+
+fun main() {
+    val users = listOf(
+        User("Ada", 36),
+        User("Linus", 54),
+    )
+    users.filter { it.age > 40 }
+         .forEach { println("\${it.name}") }
+}`,
+  c: `#include <stdio.h>
+
+int fib(int n) {
+    if (n < 2) return n;
+    return fib(n - 1) + fib(n - 2);
+}
+
+int main(void) {
+    for (int i = 0; i < 10; i++)
+        printf("%d ", fib(i));
+    return 0;
+}`,
+  cpp: `#include <iostream>
+#include <vector>
+#include <algorithm>
+
+int main() {
+    std::vector<int> v{5, 2, 9, 1};
+    std::sort(v.begin(), v.end());
+    for (const auto &x : v) std::cout << x << " ";
+    std::cout << std::endl;
+    return 0;
+}`,
+  csharp: `using System;
+using System.Linq;
+
+namespace Demo {
+    class Program {
+        static void Main() {
+            var nums = Enumerable.Range(1, 10);
+            Console.WriteLine(nums.Sum());
+        }
+    }
+}`,
+  go: `package main
+
+import "fmt"
+
+func main() {
+    ch := make(chan int)
+    go func() {
+        for i := 0; i < 5; i++ { ch <- i * i }
+        close(ch)
+    }()
+    for v := range ch { fmt.Println(v) }
+}`,
+  rust: `fn split_even(v: &[i32]) -> (Vec<i32>, Vec<i32>) {
+    v.iter().partition(|&&x| x % 2 == 0)
+}
+
+fn main() {
+    let data = vec![1, 2, 3, 4, 5, 6];
+    let (even, odd) = split_even(&data);
+    println!("偶 \u{1F7E2} {:?} 奇 {:?}", even, odd);
+}`,
+  swift: `import Foundation
+
+struct Point: Equatable {
+    var x: Double
+    var y: Double
+}
+
+let pts = [Point(x: 0, y: 0), Point(x: 3, y: 4)]
+let dist = pts.map { ($0.x * $0.x + $0.y * $0.y).squareRoot() }
+print(dist)`,
+  php: `<?php
+
+function slugify(string $text): string {
+    $text = mb_strtolower(trim($text));
+    return preg_replace('/[^a-z0-9]+/', '-', $text);
+}
+
+echo slugify("Hello Code Reel");`,
+  ruby: `class Stack
+  def initialize
+    @items = []
+  end
+
+  def push(x) = @items.push(x)
+  def pop = @items.pop
+end
+
+s = Stack.new
+s.push(1)
+puts s.pop`,
+  html: `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>示例页面</title>
+  <link rel="stylesheet" href="main.css">
+</head>
+<body>
+  <header class="hero">
+    <h1>你好，世界</h1>
+  </header>
+  <script src="app.js"></script>
+</body>
+</html>`,
+  css: `:root {
+  --ink: #16181c;
+  --paper: #f7f4ee;
+}
+
+.hero {
+  display: grid;
+  place-items: center;
+  min-height: 60vh;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+@media (max-width: 720px) {
+  .hero { min-height: 40vh; }
+}`,
+  json: `{
+  "name": "code-reel",
+  "version": "1.0.0",
+  "private": true,
+  "keywords": ["code", "animation", "canvas"],
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build"
+  },
+  "dependencies": null
+}`,
+  sql: `SELECT u.id,
+       u.name,
+       COUNT(o.id) AS order_count
+FROM users AS u
+LEFT JOIN orders AS o ON o.user_id = u.id
+WHERE u.created_at >= '2026-01-01'
+  AND u.status = 'active'
+GROUP BY u.id, u.name
+ORDER BY order_count DESC
+LIMIT 20;`,
+  shell: `#!/bin/bash
+set -euo pipefail
+
+TARGET="\${1:-dist}"
+
+echo "==> 构建 \$TARGET"
+npm run build
+if [ -d "\$TARGET" ]; then
+  du -sh "\$TARGET"
+  echo "完成"
+fi`,
+  yaml: `version: "3.9"
+
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    environment:
+      TZ: Asia/Shanghai
+    restart: unless-stopped`,
+  plain: `在此粘贴任意文本，将以等宽字体逐字呈现。`,
+};
+
+/* ---------------- 2. 词法分析 ---------------- */
+function isIdStart(c) { return /[A-Za-z_$\u00C0-\u024F\u4E00-\u9FA5]/.test(c); }
+function isIdChar(c) { return /[A-Za-z0-9_$\u00C0-\u024F\u4E00-\u9FA5]/.test(c); }
+function nextNonWs(code, i) {
+  while (i < code.length && /\s/.test(code[i])) i++;
+  return code[i] || '';
+}
+
+function tokenizeHTML(code) {
+  const toks = [];
+  const push = (type, text) => { if (text) toks.push({ type, text }); };
+  let i = 0;
+  const n = code.length;
+  while (i < n) {
+    if (code.startsWith('<!--', i)) {
+      let j = code.indexOf('-->', i);
+      j = j < 0 ? n : j + 3;
+      push('com', code.slice(i, j)); i = j; continue;
+    }
+    if (code[i] === '<') {
+      let j = i + 1;
+      if (code[j] === '/') j++;
+      if (code.startsWith('!DOCTYPE', j) || code.startsWith('!doctype', j)) {
+        let e = i; while (e < n && code[e] !== '>') e++;
+        push('meta', code.slice(i, e)); i = e; continue;
+      }
+      let k = j;
+      while (k < n && /[A-Za-z0-9:_-]/.test(code[k])) k++;
+      push('punct', code.slice(i, j));
+      push('tag', code.slice(j, k));
+      i = k;
+      while (i < n && code[i] !== '>') {
+        if (/\s/.test(code[i])) {
+          let e = i; while (e < n && /\s/.test(code[e])) e++;
+          push('ws', code.slice(i, e)); i = e; continue;
+        }
+        if (code[i] === '"' || code[i] === "'") {
+          const q = code[i];
+          let e = code.indexOf(q, i + 1);
+          e = e < 0 ? n : e + 1;
+          push('str', code.slice(i, e)); i = e; continue;
+        }
+        if (/[A-Za-z0-9_:@.\-\[]/.test(code[i])) {
+          let e = i; while (e < n && /[A-Za-z0-9_:@.\-\]]/.test(code[e])) e++;
+          const word = code.slice(i, e);
+          push(nextNonWs(code, e) === '=' ? 'attr' : 'plain', word);
+          i = e; continue;
+        }
+        push('op', code[i]); i++;
+      }
+      if (code[i] === '>') { push('punct', '>'); i++; }
+      continue;
+    }
+    let j = code.indexOf('<', i);
+    if (j < 0) j = n;
+    push('plain', code.slice(i, j));
+    i = j;
+  }
+  return toks;
+}
+
+function tokenize(code, L) {
+  if (L.custom === 'html') return tokenizeHTML(code);
+  const toks = [];
+  const push = (type, text) => { if (text) toks.push({ type, text }); };
+  const lineC = L.line || [];
+  const blockC = L.block || [];
+  const strings = L.strings || [];
+  const ops = (L.ops || DEFAULT_OPS).slice().sort((a, b) => b.length - a.length);
+  let i = 0, atLineStart = true;
+  const n = code.length;
+
+  while (i < n) {
+    const c = code[i];
+
+    /* 空白 */
+    if (c === '\n') { push('ws', '\n'); i++; atLineStart = true; continue; }
+    if (c === ' ' || c === '\t') {
+      let j = i; while (j < n && (code[j] === ' ' || code[j] === '\t')) j++;
+      push('ws', code.slice(i, j)); i = j; continue;
+    }
+    const wasLineStart = atLineStart;
+    atLineStart = false;
+
+    /* 行注释 */
+    let hit = false;
+    for (const m of lineC) {
+      if (code.startsWith(m, i)) {
+        let j = code.indexOf('\n', i);
+        if (j < 0) j = n;
+        push('com', code.slice(i, j)); i = j; hit = true; break;
+      }
+    }
+    if (hit) continue;
+
+    /* 块注释 */
+    for (const pair of blockC) {
+      if (code.startsWith(pair[0], i)) {
+        let j = code.indexOf(pair[1], i + pair[0].length);
+        j = j < 0 ? n : j + pair[1].length;
+        push('com', code.slice(i, j)); i = j; hit = true; break;
+      }
+    }
+    if (hit) continue;
+
+    /* 预处理器 */
+    if (L.pp && c === '#' && wasLineStart) {
+      let j = i + 1; while (j < n && /[A-Za-z]/.test(code[j])) j++;
+      push('meta', code.slice(i, j)); i = j; continue;
+    }
+
+    /* 注解 / 装饰器 */
+    if (L.annot && c === '@' && isIdStart(code[i + 1] || '')) {
+      let j = i + 1; while (j < n && isIdChar(code[j])) j++;
+      push('meta', code.slice(i, j)); i = j; continue;
+    }
+
+    /* 字符串 */
+    if (strings.length) {
+      for (const s of strings) {
+        if (!code.startsWith(s.o, i)) continue;
+        if (s.o === "'" && L.charLit) {
+          const close = code.indexOf("'", i + 1);
+          if (close < 0 || close - i > 4) break;  /* 生命周期标记等，按符号处理 */
+        }
+        let j = i + s.o.length;
+        let out = code.slice(i, j);
+        while (j < n) {
+          if (s.esc && code[j] === '\\') { out += code.slice(j, j + 2); j += 2; continue; }
+          if (code.startsWith(s.c, j)) { out += s.c; j += s.c.length; break; }
+          if (!s.multi && code[j] === '\n') break;
+          out += code[j]; j++;
+        }
+        let type = s.t || 'str';
+        if (L.strKey && nextNonWs(code, j) === ':') type = 'attr';
+        push(type, out); i = j; hit = true; break;
+      }
+      if (hit) continue;
+    }
+
+    /* 数字 */
+    if (/[0-9]/.test(c) || (c === '.' && /[0-9]/.test(code[i + 1] || ''))) {
+      let j = i;
+      if (c === '0' && /[xXbBoO]/.test(code[i + 1] || '')) {
+        j = i + 2; while (j < n && /[0-9a-fA-F_]/.test(code[j])) j++;
+      } else {
+        while (j < n && /[0-9_]/.test(code[j])) j++;
+        if (code[j] === '.' && /[0-9]/.test(code[j + 1] || '')) {
+          j++; while (j < n && /[0-9_]/.test(code[j])) j++;
+        }
+        if (/[eE]/.test(code[j] || '')) {
+          let k = j + 1;
+          if (/[+-]/.test(code[k] || '')) k++;
+          if (/[0-9]/.test(code[k] || '')) {
+            j = k; while (j < n && /[0-9]/.test(code[j])) j++;
+          }
+        }
+      }
+      while (j < n && /^[fFdDlLuU]$/.test(code[j])) j++;
+      push('num', code.slice(i, j)); i = j; continue;
+    }
+
+    /* 标识符 */
+    if (isIdStart(c)) {
+      let j = i; while (j < n && isIdChar(code[j])) j++;
+      const word = code.slice(i, j);
+      const w = L.ciKw ? word.toLowerCase() : word;
+      const next = nextNonWs(code, j);
+      let type = 'plain';
+      if (word[0] === '$' && L.dollar) type = 'var';
+      else if (L.propNext && next === ':') type = 'attr';
+      else if (L.kw && L.kw.has(w)) type = 'kw';
+      else if (L.type && L.type.has(w)) type = 'type';
+      else if (next === '(') type = 'fn';
+      else if (L.capType && /^[A-Z][A-Za-z0-9_]*$/.test(word)) type = 'type';
+      else if (word === 'self' || word === 'this' || word === 'super') type = 'kw';
+      push(type, word); i = j; continue;
+    }
+
+    /* 运算符 / 标点 */
+    let found = null;
+    for (const o of ops) { if (code.startsWith(o, i)) { found = o; break; } }
+    if (found) {
+      push('()[]{},;:.'.includes(found[0]) && found.length === 1 ? 'punct' : 'op', found);
+      i += found.length; continue;
+    }
+    push('()[]{},;:.'.includes(c) ? 'punct' : 'op', c);
+    i++;
+  }
+  return toks;
+}
+
+/* ---------------- 3. 语言自动识别 ---------------- */
+const DETECT_RULES = [
+  ['javascript', [[/\b(const|let|var)\s+\w+\s*=/g, 3], [/=>/g, 2], [/console\.\w+/g, 4], [/function\s*\w*\s*\(/g, 3], [/require\(|module\.exports/g, 3], [/===|!==/g, 1.5], [/\bdocument\.|window\./g, 2], [/\basync\s+function|\bawait\s+/g, 1.5]]],
+  ['typescript', [[/:\s*(string|number|boolean|any|void|unknown)\b/g, 4], [/\binterface\s+\w+\s*\{/g, 5], [/\btype\s+\w+\s*=/g, 4], [/\benum\s+\w+/g, 3], [/\bas\s+[A-Z]\w*/g, 2], [/<[A-Z]\w*(\[\])?>/g, 1.5], [/\)\s*:\s*\w+(\[\]|\s*\{)/g, 2]]],
+  ['python', [[/^\s*def\s+\w+\s*\(/gm, 5], [/^\s*class\s+\w+.*:/gm, 3], [/^\s*(from|import)\s+[\w.]+/gm, 3], [/\bself\b/g, 4], [/\belif\s+/g, 4], [/\bprint\(/g, 2], [/^\s*@\w+/gm, 2], [/\bNone\b/g, 3], [/f["']/g, 2]]],
+  ['java', [[/\bpublic\s+(static\s+)?(class|void|final|abstract)/g, 4], [/System\.out\.print/g, 5], [/\bpackage\s+[\w.]+;/g, 4], [/\bimport\s+java\./g, 5], [/@Override/g, 5], [/\bprivate\s+(static\s+)?(final\s+)?\w+\s+\w+\s*[;(]/, 2], [/\bString\[\]/g, 2]]],
+  ['kotlin', [[/\bfun\s+\w+\s*\(/g, 5], [/\bval\s+\w+\s*[:=]/g, 4], [/\bvar\s+\w+\s*[:=]/g, 2.5], [/\bdata\s+class\b/g, 5], [/\bcompanion\s+object\b/g, 5], [/\bimport\s+kotlin/g, 5], [/\bList<\w+>/g, 2.5], [/\?\s*:/g, 1.5], [/it\.\w+/g, 2]]],
+  ['c', [[/#include\s*<[\w./]+\.h>/g, 5], [/\bprintf\s*\(/g, 4], [/\bint\s+main\s*\(/g, 5], [/\bmalloc\s*\(/g, 3], [/\bsizeof\b/g, 2.5], [/\bstruct\s+\w+\s*\{/g, 2]]],
+  ['cpp', [[/#include\s*<(iostream|vector|string|map|algorithm|memory)>/g, 8], [/\bstd::/g, 5], [/\busing\s+namespace\s+std\b/g, 6], [/\bcout\s*<<|\bcin\s*>>/g, 5], [/\btemplate\s*</g, 4], [/\bnullptr\b/g, 3], [/\bauto\s*&/g, 2]]],
+  ['csharp', [[/\busing\s+System(\.\w+)*\s*;/g, 5], [/\bnamespace\s+[\w.]+/g, 3], [/Console\.WriteLine/g, 6], [/\bpublic\s+(sealed\s+)?class\b/g, 2.5], [/\bstring\[\]/g, 1.5], [/\bvar\s+\w+\s*=\s*new\b/g, 2]]],
+  ['go', [[/\bfunc\s+\w*\s*\(/g, 5], [/\bpackage\s+main\b/g, 6], [/\bfmt\.\w+/g, 5], [/:=/g, 4], [/\bchan\b/g, 4], [/\bdefer\b/g, 4], [/\bgo\s+func/g, 3], [/\berr\s*!=\s*nil\b/g, 4]]],
+  ['rust', [[/\bfn\s+\w+\s*\(/g, 4], [/\blet\s+mut\b/g, 5], [/\bprintln!\s*\(/g, 6], [/\bimpl\b/g, 4], [/\bpub\s+fn\b/g, 5], [/\buse\s+std::/g, 5], [/&str\b|&mut\b/g, 3], [/->\s*(Vec|Option|Result|Self)\b/g, 3]]],
+  ['swift', [[/\bfunc\s+\w+\s*\(/g, 3], [/\bvar\s+\w+\s*:\s*\w+/g, 3.5], [/\blet\s+\w+\s*:\s*\w+/g, 3.5], [/\bimport\s+(SwiftUI|Foundation|UIKit)/g, 6], [/\bguard\b/g, 3], [/:\s*View\b/g, 4], [/\bstruct\s+\w+\s*:\s*\w+/g, 2]]],
+  ['php', [[/<\?php/g, 8], [/\$\w+\s*=/g, 5], [/\becho\s+/g, 3], [/->\w+\(/g, 2], [/\bfunction\s+\w+\s*\(/g, 1.5]]],
+  ['ruby', [[/\bdef\s+\w+/g, 3], [/\bend\b/g, 3.5], [/\bputs\s+/g, 4], [/\brequire\s+['"]/g, 3], [/\bdo\s*\|\w+\|/g, 4], [/\battr_(accessor|reader|writer)\b/g, 5], [/@\w+\s*=/g, 2.5], [/\bnil\b/g, 2.5]]],
+  ['html', [[/<!DOCTYPE\s+html/gi, 8], [/<\/[a-z][\w-]*>/g, 3], [/<[a-z][\w-]*\s[^>]*>/g, 2], [/\b(class|href|src|id)="/g, 2.5]]],
+  ['css', [[/[.#][\w-]+\s*\{/g, 4], [/[\w-]+\s*:\s*[^;{}\n]+;/g, 3], [/@media\b/g, 5], [/:\s*(flex|grid|block|absolute|relative)/g, 2.5], [/--[\w-]+\s*:/g, 4], [/\bpx\b|\brem\b|\bvh\b/g, 1.5]]],
+  ['json', [[/^\s*\{\s*$/m, 2], [/"[^"]+"\s*:/g, 4.5], [/^\s*[\[{]/gm, 1], [/^\s*"[^"]+"\s*:\s*(true|false|null|-?\d)/gm, 4], [/,\s*$/gm, 1.5]]],
+  ['sql', [[/\bSELECT\b[\s\S]{0,300}?\bFROM\b/gi, 6], [/\bINSERT\s+INTO\b/gi, 5], [/\bCREATE\s+TABLE\b/gi, 5], [/\bWHERE\b/gi, 2.5], [/\bJOIN\b/gi, 2.5], [/\bGROUP\s+BY\b/gi, 4], [/\bORDER\s+BY\b/gi, 3]]],
+  ['shell', [[/^#!\/(bin|usr\/bin)\/(ba|z|k)?sh/gm, 8], [/\$\{?\w+\}?/g, 2.5], [/^\s*(echo|export|cd|sudo|apt|npm|git|docker|chmod)\s/gm, 3.5], [/\|\s*\w+/g, 1.5], [/\bif\s+\[\[?/g, 4], [/\bfi\b|\bdone\b|\besac\b/g, 2.5], [/set\s+-euo/g, 4]]],
+  ['yaml', [[/^\s*[\w-]+:\s*$/gm, 3], [/^\s*-\s+\w+/gm, 2], [/^---\s*$/gm, 4], [/^\s*[\w-]+:\s+\S+/gm, 2.5], [/\n\s{2,}[\w-]+:/g, 1.5]]],
+];
+
+function detectLanguage(code) {
+  const len = code.length;
+  if (len < 8) return { id: 'plain', score: 0, conf: 0 };
+  const norm = Math.log10(len + 10);
+  const scored = [];
+  for (const [id, rules] of DETECT_RULES) {
+    let raw = 0;
+    for (const [re, w] of rules) {
+      const m = code.match(re);
+      if (m) raw += Math.min(m.length, 12) * w;
+    }
+    scored.push([id, raw / norm]);
+  }
+  scored.sort((a, b) => b[1] - a[1]);
+  const best = scored[0], second = scored[1] || ['plain', 0.2];
+  if (best[1] < 1.2) return { id: 'plain', score: best[1], conf: 0 };
+  const conf = clamp(best[1] / (best[1] + second[1] + 0.4), 0, 1);
+  return { id: best[0], score: best[1], conf };
+}
+
+/* ---------------- 4. 主题 ---------------- */
+const THEMES = {
+  graphite: {
+    label: '午夜石墨', bg: '#0b0c0e', bg2: '#15171b', win: '#14161a', chrome: '#1b1e23',
+    border: '#282c31', grid: '#242930', text: '#cbd1cf', dim: '#5f676c',
+    kw: '#e2705a', type: '#8fb8a6', str: '#a6bd6f', num: '#d9a55e', com: '#565e63',
+    fn: '#7fb2c9', var: '#d3d9d6', op: '#7a8286', punct: '#6a7276',
+    tag: '#e2705a', attr: '#d9a55e', meta: '#c9a05f', caret: '#e8663a',
+  },
+  abyss: {
+    label: '深海回声', bg: '#07101a', bg2: '#0c1826', win: '#0d1a28', chrome: '#132537',
+    border: '#1d3550', grid: '#16293d', text: '#c3d4e0', dim: '#5a6f80',
+    kw: '#68b6e8', type: '#8fd0c4', str: '#79c79b', num: '#e6bd75', com: '#4a6076',
+    fn: '#67d3d3', var: '#cdd9e2', op: '#6f8496', punct: '#607588',
+    tag: '#68b6e8', attr: '#e6bd75', meta: '#b39ae0', caret: '#4fc3d9',
+  },
+  moss: {
+    label: '苔原', bg: '#0a110d', bg2: '#101a14', win: '#111a15', chrome: '#18231a',
+    border: '#243026', grid: '#1d2a20', text: '#c8d6cb', dim: '#5c6b5f',
+    kw: '#e0a35f', type: '#9ec98a', str: '#8fc07a', num: '#dcc47a', com: '#4c5c50',
+    fn: '#77c6a9', var: '#cfdcd2', op: '#6d7f72', punct: '#5f7164',
+    tag: '#e0a35f', attr: '#dcc47a', meta: '#c2a878', caret: '#d9a14f',
+  },
+  paper: {
+    label: '铅印', bg: '#ece7dd', bg2: '#e2dcd1', win: '#f8f5ef', chrome: '#efe9e0',
+    border: '#d9d2c6', grid: '#d5cec1', text: '#2b2823', dim: '#8c877d',
+    kw: '#a63b2a', type: '#3f6b5c', str: '#4c6b2f', num: '#8a5a1e', com: '#9c968b',
+    fn: '#2f5d7c', var: '#33302a', op: '#6b665e', punct: '#7a756c',
+    tag: '#a63b2a', attr: '#8a5a1e', meta: '#7a4f8a', caret: '#c4551f',
+  },
+  signal: {
+    label: '信号', bg: '#0a0a0b', bg2: '#101011', win: '#131315', chrome: '#1a1a1c',
+    border: '#26262a', grid: '#1e1e21', text: '#e4e4e6', dim: '#65656d',
+    kw: '#d8ff4d', type: '#8f8f98', str: '#b9b9c0', num: '#d8ff4d', com: '#4a4a52',
+    fn: '#ffffff', var: '#dcdce0', op: '#7d7d86', punct: '#6a6a72',
+    tag: '#d8ff4d', attr: '#b9b9c0', meta: '#d8ff4d', caret: '#d8ff4d',
+  },
+};
+
+/* ---------------- 5. 动画模式 ---------------- */
+const MODE_LIST = [
+  { id: 'type', label: '打字机', hint: '逐字符', gran: 'char', rate: 34, tail: 0.9 },
+  { id: 'chunk', label: '分段', hint: '按语法片段', gran: 'token', rate: 24, tail: 1.0 },
+  { id: 'line', label: '逐行', hint: '整行升起', gran: 'line', rate: 7.5, tail: 0.8 },
+  { id: 'orbit', label: '3D 视角', hint: '空间旋转', gran: 'char', rate: 40, tail: 1.6 },
+  { id: 'dolly', label: '平滑运镜', hint: '跟随光标', gran: 'char', rate: 28, tail: 1.7 },
+];
+
+/* ---------------- 6. 全局状态 ---------------- */
+const S = {
+  mode: 'auto',                 // 语言模式：auto | 具体语言
+  langId: 'javascript',         // 当前生效语言
+  detected: 'javascript',
+  selected: ['type', 'orbit'],
+  theme: 'graphite',
+  fontSize: 15,
+  speed: 1,
+  gutter: true,
+  chrome: true,
+  shadow: true,
+  ratio: 16 / 9,
+  empty: false,
+};
+
+const scene = {
+  ready: false,
+  plane: null,          // 离屏画布
+  planeW: 0, planeH: 0,
+  lines: [],
+  gds: {},              // 各粒度的单位数据
+  clips: [],
+  total: 0,
+  langId: 'plain',
+  overflow: false,
+};
+
+const player = { t: 0, playing: false, last: 0, recording: false };
+
+/* ---------------- 7. 场景构建 ---------------- */
+function normalizeCode(src) {
+  let s = src.replace(/\r\n?/g, '\n');
+  const fence = s.match(/^\s*```[^\n]*\n([\s\S]*?)\n?\s*```\s*$/);
+  if (fence) s = fence[1];
+  s = s.replace(/\t/g, '    ');
+  s = s.replace(/\n{4,}/g, '\n\n\n');
+  return s.replace(/\s+$/, '');
+}
+
+function splitLines(toks) {
+  const lines = [[]];
+  for (const tk of toks) {
+    const parts = tk.text.split('\n');
+    for (let i = 0; i < parts.length; i++) {
+      if (i > 0) lines.push([]);
+      if (parts[i]) lines[lines.length - 1].push({ type: tk.type, text: parts[i] });
+    }
+  }
+  while (lines.length > 1 && lines[lines.length - 1].length === 0) lines.pop();
+  return lines;
+}
+
+function charWeight(ch) {
+  if (ch === ' ' || ch === '\t') return 0.7;
+  if ('{}();'.includes(ch)) return 2.1;
+  if (',:'.includes(ch)) return 1.5;
+  return 1;
+}
+
+/* 全角判定：中日韩与表情占两个等宽字符位 */
+function wide(ch) {
+  const c = ch.codePointAt(0);
+  return (c >= 0x1100 && c <= 0x115F) ||
+    (c >= 0x2E80 && c <= 0xA4CF && c !== 0x303F) ||
+    (c >= 0xAC00 && c <= 0xD7A3) ||
+    (c >= 0xF900 && c <= 0xFAFF) ||
+    (c >= 0xFE30 && c <= 0xFE4F) ||
+    (c >= 0xFF00 && c <= 0xFF60) ||
+    (c >= 0xFFE0 && c <= 0xFFE6) ||
+    (c >= 0x1F300 && c <= 0x1FAFF) ||
+    (c >= 0x20000 && c <= 0x3FFFD);
+}
+
+/* 每行的字符像素列偏移（等宽 + 全角双宽） */
+function buildLineXs(lines) {
+  for (const toks of lines) {
+    const chars = [];
+    for (const t of toks) for (const ch of t.text) chars.push(ch);
+    const xs = new Float64Array(chars.length + 1);
+    let x = 0;
+    for (let i = 0; i < chars.length; i++) {
+      xs[i] = x;
+      x += charW * (wide(chars[i]) ? 2 : 1);
+    }
+    xs[chars.length] = x;
+    toks.xs = xs;
+  }
+}
+
+/* 为一种粒度生成单位序列（单位=一次“出现”） */
+function buildGran(lines, gran) {
+  const unitPos = [];
+  const unitCost = [];
+  const ranges = new WeakMap();
+
+  for (let li = 0; li < lines.length; li++) {
+    const toks = lines[li];
+    let col = 0;
+    const lineChars = toks.reduce((a, t) => a + t.text.length, 0);
+
+    if (gran === 'line') {
+      const start = unitPos.length;
+      unitPos.push({ line: li, col: lineChars });
+      unitCost.push(clamp(0.22 * lineChars + 0.8, 1.2, 4.6));
+      for (const t of toks) {
+        ranges.set(t, [start, start + 1]);
+        t.colStart = col; t.colEnd = col + t.text.length; t.line = li;
+        col += t.text.length;
+      }
+      continue;
+    }
+
+    for (const t of toks) {
+      const start = unitPos.length;
+      if (gran === 'token') {
+        unitCost.push(clamp(0.35 * t.text.length + 0.6, 0.8, 3.4));
+        unitPos.push({ line: li, col: col + t.text.length });
+        ranges.set(t, [start, start + 1]);
+      } else {
+        for (let k = 0; k < t.text.length; k++) {
+          unitPos.push({ line: li, col: col + k });
+          unitCost.push(charWeight(t.text[k]));
+        }
+        ranges.set(t, [start, start + t.text.length]);
+      }
+      t.colStart = col; t.colEnd = col + t.text.length; t.line = li;
+      col += t.text.length;
+    }
+
+    if (li < lines.length - 1) {
+      const nc = { line: Math.min(li + 1, lines.length - 1), col: 0 };
+      unitPos.push(nc);
+      unitCost.push(gran === 'char' ? 3.2 : 1.1);
+    }
+  }
+
+  const n = unitPos.length;
+  const cum = new Float64Array(n + 1);
+  for (let i = 0; i < n; i++) cum[i + 1] = cum[i] + unitCost[i];
+  return { unitPos, unitCost, cum, ranges, total: cum[n] };
+}
+
+/* 时间 → 单位游标 */
+function uOfCost(gd, targetCost) {
+  const n = gd.unitCost.length;
+  if (n === 0) return 0;
+  if (targetCost <= 0) return 0;
+  if (targetCost >= gd.total) return n;
+  let lo = 0, hi = n;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (gd.cum[mid + 1] <= targetCost) lo = mid + 1; else hi = mid;
+  }
+  const i = Math.min(lo, n - 1);
+  const c = gd.unitCost[i] || 1;
+  return clamp(i + (targetCost - gd.cum[i]) / c, 0, n);
+}
+
+let measureCtx = document.createElement('canvas').getContext('2d');
+let charW = 8, lineH = 24, fontPx = 15, pad = 24, gutterW = 44, titleH = 34;
+
+function measureAt(fp, maxUnits, lineCount) {
+  measureCtx.font = `${fp}px ${MONO}`;
+  const cw = measureCtx.measureText('0'.repeat(20)).width / 20;
+  const lh = Math.round(fp * 1.62);
+  const g = S.gutter ? Math.max(36, String(lineCount).length * cw + 20) : 0;
+  const p = Math.round(fp * 1.7);
+  const th = S.chrome ? Math.round(fp * 2.4) : 0;
+  const W = Math.ceil(p * 2 + g + maxUnits * cw + 2);
+  const H = Math.ceil(p * 2 + th + lineCount * lh + 2);
+  return { cw, lh, g, p, th, W, H };
+}
+
+function buildScene() {
+  const raw = normalizeCode($("#code").value);
+  S.empty = !raw.trim();
+
+  if (S.empty) {
+    scene.ready = false;
+    scene.clips = [];
+    scene.total = 0;
+    player.t = 0;
+    updateStats(0, 0);
+    return;
+  }
+
+  /* 语言 */
+  const det = detectLanguage(raw);
+  S.detected = det.id;
+  scene.conf = det.conf;
+  const langId = S.mode === 'auto' ? det.id : S.mode;
+  S.langId = langId;
+  scene.langId = langId;
+
+  const L = LANGS[langId] || LANGS.plain;
+  const lines = splitLines(tokenize(raw, L));
+  const lineCount = lines.length;
+  scene.overflow = lineCount > 400;
+  if (scene.overflow) lines.length = 400;
+  /* 用“字符位”宽度计算版面，全角字符按两格 */
+  const maxUnits = Math.max(4, ...lines.map(l => l.reduce((a, t) => {
+    let u = 0; for (const ch of t.text) u += wide(ch) ? 2 : 1; return a + u;
+  }, 0)));
+  scene.lines = lines;
+
+  updateStats(lineCount, raw.length);
+  if (scene.overflow) $("#statNote").textContent += '（仅渲染前 400 行）';
+
+  /* 版面：平面按屏幕像素 1:1 绘制，保证文字清晰、不模糊 */
+  const viewW = view.w, viewH = view.h;
+  const availW = viewW - 36, availH = viewH - 36;
+
+  const ref = measureAt(S.fontSize, maxUnits, lines.length);
+  const fitWRef = availW / ref.W;
+  let fp = clamp(S.fontSize * fitWRef, 12, 34);
+  let m = measureAt(fp, maxUnits, lines.length);
+  if (m.W > availW) {
+    fp *= availW / m.W;
+    m = measureAt(fp, maxUnits, lines.length);
+  }
+  const MAXPIX = 4200;
+  if (m.W > MAXPIX || m.H > MAXPIX) {
+    fp *= Math.min(MAXPIX / m.W, MAXPIX / m.H);
+    m = measureAt(fp, maxUnits, lines.length);
+  }
+  fp = Math.max(9, Math.floor(fp));
+  m = measureAt(fp, maxUnits, lines.length);
+
+  fontPx = fp; charW = m.cw; lineH = m.lh; pad = m.p; gutterW = m.g; titleH = m.th;
+  const planeW = m.W, planeH = m.H;
+  scene.planeW = planeW;
+  scene.planeH = planeH;
+  buildLineXs(lines);
+
+  const cvs = scene.plane || (scene.plane = document.createElement('canvas'));
+  if (cvs.width !== planeW || cvs.height !== planeH) {
+    cvs.width = planeW; cvs.height = planeH;
+  }
+  scene.planeCtx = cvs.getContext('2d');
+
+  /* 各粒度单位 */
+  scene.gds.char = buildGran(lines, 'char');
+  scene.gds.token = buildGran(lines, 'token');
+  scene.gds.line = buildGran(lines, 'line');
+
+  /* 视口适配：宽度必须装下，高度溢出则由相机跟随滚动 */
+  scene.baseScale = Math.min(1, availW / planeW);
+  scene.scroll = planeH * scene.baseScale > availH + 1;
+  scene.maxScroll = Math.max(0, (planeH * scene.baseScale - availH) / 2) / scene.baseScale;
+
+  /* 片段 */
+  const MAXD = 42;
+  const clips = [];
+  for (const id of S.selected) {
+    const mode = MODE_LIST.find(x => x.id === id);
+    if (!mode) continue;
+    const gd = scene.gds[mode.gran];
+    let rate = mode.rate * S.speed;
+    let typeDur = gd.total / rate;
+    if (typeDur + mode.tail > MAXD) {
+      typeDur = MAXD - mode.tail;          /* 保证动画能在上限内写完 */
+      rate = gd.total / typeDur;
+    }
+    clips.push({ mode, gd, rate, typeDur, D: typeDur + mode.tail, tail: mode.tail });
+  }
+  scene.clips = clips;
+  scene.total = clips.reduce((a, c) => a + c.D, 0);
+  scene.ready = clips.length > 0;
+
+  player.t = clamp(player.t, 0, scene.total);
+  updateHeader();
+  $("#durNote").textContent = scene.total ? scene.total.toFixed(1) + ' s' : '—';
+  $("#scrub").max = String(Math.round(scene.total * 1000));
+  player.playing = true;
+  player.last = performance.now();
+}
+
+function updateStats(lines, chars) {
+  $("#statNote").textContent = `${lines} 行 · ${chars} 字符`;
+}
+
+function updateHeader() {
+  const L = LANGS[S.langId] || LANGS.plain;
+  const badge = $("#langBadge");
+  const conf = scene.conf == null ? 0 : scene.conf;
+  badge.querySelector("b").textContent = L.label;
+  badge.querySelector("span").textContent = S.mode === 'auto'
+    ? (S.empty ? '等待输入' : '自动识别' + (conf > 0 ? ' ' + Math.round(conf * 100) + '%' : ''))
+    : '手动指定';
+  $("#langSel").value = S.mode;
+}
+
+/* ---------------- 8. 播放片段定位 ---------------- */
+function locate(t) {
+  let acc = 0;
+  for (let i = 0; i < scene.clips.length; i++) {
+    const c = scene.clips[i];
+    if (t < acc + c.D || i === scene.clips.length - 1) {
+      return { clip: c, index: i, te: clamp(t - acc, 0, c.D) };
+    }
+    acc += c.D;
+  }
+  return null;
+}
+
+/* ---------------- 9. 相机与投影 ---------------- */
+function caretPlaneY(clip, t) {
+  const gd = clip.gd, mode = clip.mode;
+  const u = uOfCost(gd, clip.rate * clamp(t, 0, clip.typeDur));
+  const idx = Math.min(Math.floor(u), gd.unitPos.length - 1);
+  const p = gd.unitPos[Math.max(0, idx)] || { line: 0, col: 0 };
+  const y = pad + titleH + p.line * lineH + lineH / 2;
+  return y - scene.planeH / 2;
+}
+
+function cameraFor(clip, te, tAbs) {
+  const D = clip.D, p = clamp(te / D, 0, 1);
+  const base = scene.baseScale;
+  const tail = clip.tail;
+  const settle = easeInOutCubic(clamp((te - (D - tail)) / Math.max(0.3, tail), 0, 1));
+  const enter = easeOutCubic(clamp(te / 0.9, 0, 1));
+  const mode = clip.mode.id;
+
+  const followY = (lag) => {
+    if (!scene.scroll) return 0;
+    const y = clamp(caretPlaneY(clip, te - lag), -scene.maxScroll, scene.maxScroll);
+    return y * (1 - settle);
+  };
+
+  let rotX = 0, rotY = 0, rotZ = 0, scale = base, z = 0, y = 0;
+
+  if (mode === 'type') {
+    scale = base * (1.045 - 0.045 * enter) * (1 - 0.025 * settle);
+    y = -followY(0.24) * scale;
+  } else if (mode === 'chunk') {
+    rotX = 0.05 * (1 - enter);
+    scale = base * (1.03 - 0.03 * enter);
+    y = -followY(0.28) * scale;
+  } else if (mode === 'line') {
+    rotX = 0.035 * (1 - enter);
+    scale = base * (1.02 - 0.02 * enter);
+    y = -followY(0.3) * scale;
+  } else if (mode === 'orbit') {
+    const e = easeInOutCubic(clamp(p * 1.25, 0, 1));
+    const e2 = easeOutCubic(clamp(p * 0.95, 0, 1));
+    rotY = lerp(0.30, -0.05, e2) + 0.012 * Math.sin(te * 0.6);
+    rotX = lerp(0.17, 0.015, e) + 0.008 * Math.cos(te * 0.5);
+    rotZ = lerp(0.016, -0.008, e);
+    scale = base * lerp(0.90, 1.0, e);
+    z = lerp(-170, 0, e);
+    y = -followY(0.32) * scale * 0.6;
+  } else if (mode === 'dolly') {
+    const zz = lerp(1.16, 1.02, enter) * (1 - 0.055 * settle);
+    rotX = lerp(0.09, 0, enter) * (1 - settle * 0.55) + 0.028 * settle;
+    rotY = 0.03 * Math.sin(te * 0.35) * (1 - settle);
+    scale = base * zz;
+    y = -followY(0.3) * scale;
+  }
+  return { rotX, rotY, rotZ, scale, x: 0, y, z, persp: 1500 };
+}
+
+function makeProjector(cam) {
+  const cx = Math.cos(cam.rotX), sx = Math.sin(cam.rotX);
+  const cy = Math.cos(cam.rotY), sy = Math.sin(cam.rotY);
+  const cz = Math.cos(cam.rotZ), sz = Math.sin(cam.rotZ);
+  const ox = view.w / 2, oy = view.h / 2;
+  const P = cam.persp;
+  return function (x, y, z) {
+    let y1 = y * cx - z * sx, z1 = y * sx + z * cx, x1 = x;
+    let x2 = x1 * cy + z1 * sy, z2 = -x1 * sy + z1 * cy, y2 = y1;
+    let x3 = x2 * cz - y2 * sz, y3 = x2 * sz + y2 * cz, z3 = z2;
+    x3 *= cam.scale; y3 *= cam.scale; z3 *= cam.scale;
+    const X = x3 + cam.x, Y = y3 + cam.y, Z = z3 + cam.z;
+    const f = P / Math.max(220, P - Z);
+    return { x: X * f + ox, y: Y * f + oy, f };
+  };
+}
+
+/* ---------------- 10. 渲染 ---------------- */
+const cv = $("#cv");
+const ctx = cv.getContext("2d", { alpha: false });
+const view = { w: 960, h: 540, dpr: 1 };
+
+let gradCache = { key: '', grad: null };
+
+function fitCanvas() {
+  const box = $("#stageInner");
+  const bw = Math.max(200, box.clientWidth);
+  const bh = Math.max(160, box.clientHeight);
+  let w = bw, h = w / S.ratio;
+  if (h > bh) { h = bh; w = h * S.ratio; }
+  view.w = Math.round(w);
+  view.h = Math.round(h);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  view.dpr = dpr;
+  cv.style.width = view.w + "px";
+  cv.style.height = view.h + "px";
+  cv.width = Math.round(view.w * dpr);
+  cv.height = Math.round(view.h * dpr);
+}
+
+function drawBackground(th) {
+  const key = th.bg + view.w + view.h;
+  if (gradCache.key !== key) {
+    const g = ctx.createRadialGradient(view.w * 0.5, view.h * 0.46, 0, view.w * 0.5, view.h * 0.5, Math.max(view.w, view.h) * 0.78);
+    g.addColorStop(0, th.bg2);
+    g.addColorStop(1, th.bg);
+    gradCache = { key, grad: g };
+  }
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  ctx.fillStyle = gradCache.grad;
+  ctx.fillRect(0, 0, view.w, view.h);
+}
+
+function drawGrid3D(th, proj, W, H) {
+  const step = 52;
+  const spanX = W * 1.4, spanY = H * 1.4;
+  const z = -190;
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = th.grid;
+  ctx.globalAlpha = 0.55;
+  ctx.beginPath();
+  for (let x = -spanX / 2; x <= spanX / 2; x += step) {
+    const a = proj(x, -spanY / 2, z), b = proj(x, spanY / 2, z);
+    if (a.f <= 0.15 || b.f <= 0.15) continue;
+    ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+  }
+  for (let y = -spanY / 2; y <= spanY / 2; y += step) {
+    const a = proj(-spanX / 2, y, z), b = proj(spanX / 2, y, z);
+    if (a.f <= 0.15 || b.f <= 0.15) continue;
+    ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y);
+  }
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+/* 把离屏位图按网格切片做透视映射（srcScale：源位图相对平面尺度的比例） */
+function blitWarped(src, W, H, proj, ox, oy, alpha, srcScale) {
+  const k = srcScale || 1;
+  /* 网格越细，透视映射越精确（阿弗因近似误差与切片尺寸成正比） */
+  const cols = clamp(Math.round(W / 80), 6, 40);
+  const rows = clamp(Math.round(H / 80), 6, 40);
+  const dw = W / cols, dh = H / rows;
+  const dpr = view.dpr;
+  ctx.globalAlpha = alpha;
+  for (let r = 0; r < rows; r++) {
+    const y0 = r * dh;
+    for (let c = 0; c < cols; c++) {
+      const x0 = c * dw;
+      const p0 = proj(x0 - W / 2, y0 - H / 2, 0);
+      const p1 = proj(x0 + dw - W / 2, y0 - H / 2, 0);
+      const p2 = proj(x0 - W / 2, y0 + dh - H / 2, 0);
+      if (p0.f <= 0.15 || p1.f <= 0.15 || p2.f <= 0.15) continue;
+      const maxX = Math.max(p0.x, p1.x, p2.x);
+      if (maxX < -60 || Math.min(p0.x, p1.x, p2.x) > view.w + 60) continue;
+      const ax = (p1.x - p0.x) / dw, ay = (p1.y - p0.y) / dw;
+      const bx = (p2.x - p0.x) / dh, by = (p2.y - p0.y) / dh;
+      ctx.setTransform(ax * dpr, ay * dpr, bx * dpr, by * dpr, (p0.x + ox) * dpr, (p0.y + oy) * dpr);
+      ctx.drawImage(src, x0 * k, y0 * k, dw * k, dh * k, x0, y0, dw, dh);
+    }
+  }
+  ctx.globalAlpha = 1;
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+}
+
+let shadowA = null, shadowB = null;
+
+function drawShadow(th, proj, W, H) {
+  const k = 0.2;
+  const sw = Math.max(2, Math.round(W * k)), sh = Math.max(2, Math.round(H * k));
+  if (!shadowA) { shadowA = document.createElement("canvas"); shadowB = document.createElement("canvas"); }
+  if (shadowA.width !== sw || shadowA.height !== sh) { shadowA.width = sw; shadowA.height = sh; shadowB.width = sw; shadowB.height = sh; }
+  const ga = shadowA.getContext("2d");
+  ga.setTransform(1, 0, 0, 1, 0, 0);
+  ga.clearRect(0, 0, sw, sh);
+  ga.drawImage(scene.plane, 0, 0, sw, sh);
+  ga.globalCompositeOperation = "source-atop";
+  ga.fillStyle = "#000";
+  ga.globalAlpha = 0.5;
+  ga.fillRect(0, 0, sw, sh);
+  ga.globalAlpha = 1;
+  ga.globalCompositeOperation = "source-over";
+
+  const gb = shadowB.getContext("2d");
+  gb.setTransform(1, 0, 0, 1, 0, 0);
+  gb.clearRect(0, 0, sw, sh);
+  gb.filter = "blur(6px)";
+  gb.drawImage(shadowA, 0, 0);
+  gb.filter = "none";
+
+  blitWarped(shadowB, W, H, proj, 10, 26, 0.34, k);
+}
+
+/* 离屏平面：绘制代码本体 */
+function drawPlane(clip, te, u, tAbs) {
+  const g = scene.planeCtx;
+  const th = THEMES[S.theme];
+  const W = scene.planeW, H = scene.planeH;
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.clearRect(0, 0, W, H);
+
+  const radius = Math.round(fontPx * 0.9);
+  rr(g, 0.5, 0.5, W - 1, H - 1, radius);
+  g.fillStyle = th.win;
+  g.fill();
+  g.lineWidth = 1;
+  g.strokeStyle = th.border;
+  g.stroke();
+
+  g.font = `${fontPx}px ${MONO}`;
+  g.textBaseline = "middle";
+
+  /* 标题栏 */
+  if (S.chrome) {
+    g.save();
+    rr(g, 1, 1, W - 2, titleH + radius, radius);
+    g.clip();
+    g.fillStyle = th.chrome;
+    g.fillRect(1, 1, W - 2, titleH);
+    g.restore();
+    const dots = ['#e06c5a', '#d9a55e', '#8fb87a'];
+    dots.forEach((col, i) => {
+      g.beginPath();
+      g.arc(pad + 6 + i * (fontPx * 0.95), titleH / 2, fontPx * 0.28, 0, Math.PI * 2);
+      g.fillStyle = col;
+      g.globalAlpha = 0.75;
+      g.fill();
+      g.globalAlpha = 1;
+    });
+    const L = LANGS[scene.langId] || LANGS.plain;
+    g.fillStyle = th.dim;
+    g.textAlign = "center";
+    g.font = `${Math.round(fontPx * 0.86)}px ${MONO}`;
+    g.fillText('snippet.' + L.ext, W / 2, titleH / 2);
+    g.textAlign = "left";
+    g.font = `${fontPx}px ${MONO}`;
+  }
+
+  /* 当前行底纹 */
+  const uNow = Math.min(Math.floor(u), clip.gd.unitPos.length - 1);
+  const curPos = clip.gd.unitPos[Math.max(0, uNow)] || { line: 0, col: 0 };
+  const lineTop = pad + titleH + curPos.line * lineH;
+  g.fillStyle = th.text;
+  g.globalAlpha = 0.028;
+  g.fillRect(pad * 0.4, lineTop - lineH * 0.1, W - pad * 0.8, lineH * 1.1);
+  g.globalAlpha = 1;
+
+  /* 行号 */
+  if (S.gutter) {
+    g.fillStyle = th.dim;
+    g.globalAlpha = 0.62;
+    g.font = `${Math.round(fontPx * 0.86)}px ${MONO}`;
+    g.textAlign = "right";
+    const revealed = curPos.line;
+    for (let li = 0; li < scene.lines.length; li++) {
+      if (li > revealed + 1) break;
+      const alphaDot = li <= revealed ? 1 : 0.35;
+      g.globalAlpha = 0.62 * alphaDot;
+      g.fillText(String(li + 1), pad + gutterW - 14, pad + titleH + li * lineH + lineH / 2);
+    }
+    g.globalAlpha = 1;
+    g.textAlign = "left";
+    g.font = `${fontPx}px ${MONO}`;
+  }
+
+  /* 代码 */
+  const gran = clip.mode.gran;
+  const baseX = pad + gutterW;
+  const typeDone = te >= clip.typeDur;
+
+  for (let li = 0; li < scene.lines.length; li++) {
+    if (li > curPos.line + 1) break;
+    const toks = scene.lines[li];
+    const xs = toks.xs;
+    if (!xs) continue;
+    const y = pad + titleH + li * lineH + lineH / 2;
+    for (const tk of toks) {
+      const r = clip.gd.ranges.get(tk);
+      if (!r) continue;
+      const [u0, u1] = r;
+      const span = u1 - u0;
+      const frac = span <= 0 ? 1 : clamp((u - u0) / span, 0, 1);
+      if (frac <= 0) continue;
+      const col = baseX + xs[tk.colStart];
+
+      if (gran === 'char') {
+        if (frac >= 1) {
+          g.globalAlpha = 1;
+          g.fillStyle = th[tk.type] || th.text;
+          g.fillText(tk.text, col, y);
+        } else {
+          const nShow = Math.max(0, Math.floor(u - u0));
+          if (nShow > 0) {
+            g.globalAlpha = 1;
+            g.fillStyle = th[tk.type] || th.text;
+            g.fillText(tk.text.slice(0, nShow), col, y);
+          }
+          const a = clamp(u - u0 - nShow, 0, 1);
+          if (a > 0) {
+            g.globalAlpha = a;
+            g.fillStyle = th[tk.type] || th.text;
+            g.fillText(tk.text[nShow], baseX + xs[tk.colStart + nShow], y + (1 - a) * 4);
+          }
+        }
+      } else {
+        const dy = (1 - frac) * (gran === 'line' ? 11 : 6);
+        g.globalAlpha = frac;
+        g.fillStyle = th[tk.type] || th.text;
+        g.fillText(tk.text, col, y + dy);
+      }
+      g.globalAlpha = 1;
+    }
+  }
+
+  /* 光标 */
+  const blink = 0.35 + 0.65 * (0.5 + 0.5 * Math.cos(te * Math.PI * 2 / 1.06));
+  const fadeEnd = typeDone
+    ? 1 - easeInOutCubic(clamp((te - (clip.D - 0.32)) / 0.32, 0, 1))
+    : 1;
+  const caretAlpha = (typeDone ? 0.9 : blink) * fadeEnd;
+  if (caretAlpha > 0.01) {
+    const cl = scene.lines[curPos.line];
+    const cxs = cl && cl.xs ? cl.xs : null;
+    const cx = baseX + (cxs ? cxs[Math.min(curPos.col, cxs.length - 1)] : 0);
+    const cy = pad + titleH + curPos.line * lineH + lineH * 0.5;
+    g.globalAlpha = caretAlpha;
+    g.fillStyle = th.caret;
+    g.fillRect(cx - 1, cy - lineH * 0.46, Math.max(2, fontPx * 0.12), lineH * 0.92);
+    g.globalAlpha = 1;
+  }
+}
+
+function drawEmpty(th) {
+  ctx.setTransform(view.dpr, 0, 0, view.dpr, 0, 0);
+  ctx.fillStyle = th.bg2;
+  ctx.fillRect(0, 0, view.w, view.h);
+  ctx.fillStyle = th.dim;
+  ctx.font = `13px ${MONO}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("在左侧粘贴代码，自动识别语言并生成编写动画", view.w / 2, view.h / 2);
+  ctx.textAlign = "left";
+  ctx.fillText("CODE REEL", 22, 26);
+}
+
+function renderAt(t) {
+  const th = THEMES[S.theme];
+  drawBackground(th);
+  if (!scene.ready) { drawEmpty(th); return; }
+
+  const loc = locate(t);
+  if (!loc) return;
+  const { clip, te } = loc;
+  const u = uOfCost(clip.gd, clip.rate * clamp(te, 0, clip.typeDur));
+
+  drawPlane(clip, te, u, t);
+
+  const cam = cameraFor(clip, te, t);
+  const proj = makeProjector(cam);
+
+  if (S.shadow) drawGrid3D(th, proj, scene.planeW, scene.planeH);
+  if (S.shadow) drawShadow(th, proj, scene.planeW, scene.planeH);
+  blitWarped(scene.plane, scene.planeW, scene.planeH, proj, 0, 0, 1, 0);
+}
+
+/* ---------------- 11. 主循环 ---------------- */
+let lastLabel = '', lastScrub = -1;
+
+function loop(now) {
+  const dt = Math.min(0.05, (now - player.last) / 1000);
+  player.last = now;
+  if (player.playing) {
+    player.t += dt;
+    if (player.t >= scene.total) { player.t = scene.total; player.playing = false; updatePlayIcon(); }
+  }
+  renderAt(player.t);
+
+  const lab = `${player.t.toFixed(1)} / ${scene.total.toFixed(1)} s`;
+  if (lab !== lastLabel) {
+    lastLabel = lab;
+    $("#timeLabel").innerHTML = `<b>${player.t.toFixed(1)}</b> / ${scene.total.toFixed(1)} s`;
+  }
+  const sv = Math.round(player.t * 1000);
+  if (Math.abs(sv - lastScrub) > 8) { lastScrub = sv; $("#scrub").value = String(sv); }
+
+  const tag = scene.ready ? (locate(player.t) ? locate(player.t).clip.mode.label : '—') : '—';
+  if ($("#clipTag").textContent !== tag) $("#clipTag").textContent = tag;
+
+  requestAnimationFrame(loop);
+}
+
+function updatePlayIcon() {
+  $("#icoPlay").innerHTML = player.playing
+    ? '<path d="M3 2h3.6v12H3zM9.4 2H13v12H9.4z"/>'
+    : '<path d="M3 1.7v12.6c0 .5.55.8.97.53l9.6-6.3a.63.63 0 0 0 0-1.06l-9.6-6.3A.63.63 0 0 0 3 1.7z"/>';
+}
+
+/* ---------------- 12. 界面装配 ---------------- */
+function fillSelects() {
+  const langSel = $("#langSel");
+  langSel.innerHTML = '';
+  const optAuto = document.createElement('option');
+  optAuto.value = 'auto';
+  optAuto.textContent = '自动识别';
+  langSel.appendChild(optAuto);
+  for (const id in LANGS) {
+    const o = document.createElement('option');
+    o.value = id;
+    o.textContent = LANGS[id].label;
+    langSel.appendChild(o);
+  }
+  langSel.value = S.mode;
+
+  const thSel = $("#themeSel");
+  thSel.innerHTML = '';
+  for (const id in THEMES) {
+    const o = document.createElement('option');
+    o.value = id;
+    o.textContent = THEMES[id].label;
+    thSel.appendChild(o);
+  }
+  thSel.value = S.theme;
+
+  const chips = $("#modeChips");
+  chips.innerHTML = '';
+  for (const m of MODE_LIST) {
+    const b = document.createElement('button');
+    b.className = 'chip';
+    b.dataset.id = m.id;
+    b.setAttribute('aria-pressed', S.selected.includes(m.id) ? 'true' : 'false');
+    b.innerHTML = `${m.label}<small>${m.hint}</small>`;
+    b.addEventListener('click', () => {
+      const on = S.selected.includes(m.id);
+      if (on && S.selected.length === 1) { toast('至少保留一种动画模式'); return; }
+      S.selected = on ? S.selected.filter(x => x !== m.id) : S.selected.concat(m.id);
+      b.setAttribute('aria-pressed', on ? 'false' : 'true');
+      buildScene();
+      player.t = 0;
+    });
+    chips.appendChild(b);
+  }
+}
+
+let buildTimer = 0;
+function scheduleBuild(delay) {
+  clearTimeout(buildTimer);
+  buildTimer = setTimeout(() => { fitCanvas(); buildScene(); player.t = 0; }, delay || 200);
+}
+
+function bindUI() {
+  const ta = $("#code");
+  ta.addEventListener("input", () => { scheduleBuild(260); });
+
+  $("#langSel").addEventListener("change", e => {
+    S.mode = e.target.value;
+    buildScene(); player.t = 0; updateHeader();
+  });
+
+  $("#themeSel").addEventListener("change", e => { S.theme = e.target.value; gradCache.key = ''; });
+
+  $("#btnSample").addEventListener("click", () => {
+    const id = S.mode === 'auto' ? (S.detected || 'javascript') : S.mode;
+    const src = SAMPLES[id] || SAMPLES.javascript;
+    $("#code").value = src;
+    S.mode = id;
+    $("#langSel").value = id;
+    fitCanvas();
+    buildScene();
+    player.t = 0;
+  });
+
+  $("#btnClear").addEventListener("click", () => {
+    $("#code").value = '';
+    player.t = 0;
+    player.playing = false;
+    updatePlayIcon();
+    buildScene();
+    $("#code").focus();
+  });
+
+  $("#speed").addEventListener("input", e => {
+    S.speed = parseInt(e.target.value, 10) / 100;
+    $("#speedVal").textContent = S.speed.toFixed(1) + '×';
+    buildScene(); player.t = 0;
+  });
+
+  $("#fontSize").addEventListener("input", e => {
+    S.fontSize = parseInt(e.target.value, 10);
+    $("#fontVal").textContent = String(S.fontSize);
+    scheduleBuild(140);
+  });
+
+  $("#ratioSeg").addEventListener("click", e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    [...e.currentTarget.children].forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+    const [a, c] = b.dataset.ratio.split('/').map(Number);
+    S.ratio = a / c;
+    scheduleBuild(80);
+  });
+
+  $("#optGutter").addEventListener("change", e => { S.gutter = e.target.checked; scheduleBuild(80); });
+  $("#optChrome").addEventListener("change", e => { S.chrome = e.target.checked; scheduleBuild(80); });
+  $("#optShadow").addEventListener("change", e => { S.shadow = e.target.checked; });
+
+  $("#btnPlay").addEventListener("click", () => {
+    if (!scene.ready) return;
+    if (!player.playing && player.t >= scene.total - 0.01) player.t = 0;
+    player.playing = !player.playing;
+    player.last = performance.now();
+    updatePlayIcon();
+  });
+
+  $("#btnRestart").addEventListener("click", () => {
+    player.t = 0;
+    player.playing = true;
+    player.last = performance.now();
+    updatePlayIcon();
+  });
+
+  $("#scrub").addEventListener("input", e => {
+    player.playing = false;
+    updatePlayIcon();
+    player.t = clamp(parseInt(e.target.value, 10) / 1000, 0, scene.total);
+  });
+
+  $("#btnExport").addEventListener("click", exportVideo);
+
+  document.addEventListener("keydown", e => {
+    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    if (e.code === 'Space') { e.preventDefault(); $("#btnPlay").click(); }
+    if (e.code === 'KeyR') { $("#btnRestart").click(); }
+  });
+
+  const ro = new ResizeObserver(() => scheduleBuild(120));
+  ro.observe($("#stageInner"));
+}
+
+/* ---------------- 13. 视频导出 ---------------- */
+function exportVideo() {
+  if (!scene.ready) { toast('请先输入代码'); return; }
+  if (player.recording) return;
+  if (typeof MediaRecorder === 'undefined') { toast('当前浏览器不支持视频录制'); return; }
+  const mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
+    .find(m => MediaRecorder.isTypeSupported(m));
+  if (!mime) { toast('当前浏览器不支持 WebM 录制'); return; }
+
+  const stream = cv.captureStream(60);
+  let rec;
+  try {
+    rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12000000 });
+  } catch (err) { toast('录制初始化失败：' + err.message); return; }
+
+  const chunks = [];
+  rec.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  rec.onstop = () => {
+    const blob = new Blob(chunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+    a.href = url;
+    a.download = `code-reel-${ts}.webm`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    player.recording = false;
+    $("#btnExport").disabled = false;
+    $("#btnExport").textContent = '导出视频（WebM）';
+    toast('已生成视频');
+  };
+
+  player.recording = true;
+  $("#btnExport").disabled = true;
+  $("#btnExport").textContent = '录制中…';
+  player.t = 0;
+  player.playing = false;
+  renderAt(0);
+  rec.start();
+  setTimeout(() => { player.last = performance.now(); player.playing = true; }, 60);
+  setTimeout(() => {
+    player.playing = false;
+    try { rec.stop(); } catch (e) { }
+  }, (scene.total + 0.35) * 1000 + 120);
+}
+
+/* ---------------- 14. 启动 ---------------- */
+(function init() {
+  fillSelects();
+  bindUI();
+  $("#code").value = SAMPLES.javascript;
+  S.mode = 'auto';
+  fitCanvas();
+  buildScene();
+  player.t = 0;
+  player.playing = true;
+  player.last = performance.now();
+  updatePlayIcon();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

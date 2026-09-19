@@ -1,0 +1,26 @@
+# 操作系统
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 编辑器 / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 日志与临时文件
+*.log
+npm-debug.log*
+*.tmp
+*.temp
+
+# 导出的视频文件
+*.webm
+*.mp4
+
+# 依赖与构建产物（本项目无依赖、无构建步骤，仅作兜底）
+node_modules/
+dist/
+build/
