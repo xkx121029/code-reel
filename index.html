@@ -2274,6 +2274,7 @@ function applyTemplate(t) {
   syncAllUI();
   fitCanvas();
   buildScene();
+  syncKfUI();                          /* 提示里要显示当前模版名 */
   player.t = 0;
   player.last = performance.now();
   updatePlayIcon();
