@@ -141,6 +141,8 @@ select:focus{border-color:var(--line-2)}
 }
 .tl-head .note{margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tl-head .btn{flex:0 0 auto;padding:3px 10px;font-size:11px;border-radius:7px}
+.tl-seg{flex:0 0 auto;width:128px;border-radius:7px}
+.tl-seg button{padding:3px 0;font-size:11px;letter-spacing:0}
 .tl-svg{display:block;width:100%;touch-action:none;cursor:crosshair}
 .tl-svg text{font-family:var(--mono);user-select:none;pointer-events:none}
 .tl-lab{font-size:9.5px;fill:var(--dim);letter-spacing:.06em}
@@ -151,6 +153,7 @@ select:focus{border-color:var(--line-2)}
 .tl-mid{stroke:var(--line-2);stroke-width:1;stroke-dasharray:2 3;opacity:.55}
 .tl-curve{fill:none;stroke:var(--accent);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round}
 .tl-dot{fill:var(--panel);stroke:var(--accent);stroke-width:1.5;cursor:grab}
+.tl-dot.ro{cursor:default;stroke-width:1.2;opacity:.8}
 .tl-dot.on{fill:var(--accent)}
 .tl-caret{stroke:var(--txt);stroke-width:1.1;opacity:.85}
 .tl-caretmark{fill:var(--txt);opacity:.85}
@@ -255,8 +258,12 @@ canvas.dragging{cursor:grabbing}
     <div class="timeline">
       <div class="tl-head">
         <h2>关 键 帧 时 间 轴</h2>
-        <span class="note">双击轨道加关键帧 · 拖动改时机与数值 · 双击关键帧删除 · 拖标尺定位</span>
-        <button class="btn btn-ghost" id="btnKfClear">清空关键帧</button>
+        <div class="seg tl-seg" id="kfModeSeg">
+          <button data-kf="basic" aria-pressed="true" title="按出现方式与镜头运动自动打点">基础版</button>
+          <button data-kf="pro" aria-pressed="false" title="手动打点，可自由裁剪节奏">高级版</button>
+        </div>
+        <span class="note" id="kfNote"></span>
+        <button class="btn btn-ghost" id="btnKfAction">重新生成</button>
       </div>
       <svg class="tl-svg" id="tlSvg"></svg>
     </div>
@@ -1047,6 +1054,7 @@ const S = {
   autoCam: false,        // 自动运镜（3D 缓慢漂移）
   /* 关键帧：按通道分开，键为 { t: 全局时间轴秒数, v: 数值 }，t 升序 */
   kf: { speed: [], zoom: [], rotX: [], rotY: [] },
+  kfMode: 'basic',       // basic=自动编排（只读） | pro=手动打点
   ratio: 16 / 9,
   empty: false,
 };
@@ -1311,6 +1319,7 @@ function buildScene() {
     scene.clips = [];
     scene.total = 0;
     player.t = 0;
+    if (S.kfMode === 'basic') applyAuto();   /* 基础版没有片段就没有编排 */
     tl.dirty = true;
     updateStats(0, 0);
     return;
@@ -1438,7 +1447,8 @@ function buildScene() {
   scene.clips = clips;
   scene.total = acc;
   scene.ready = clips.length > 0;
-  clampKeys();                       /* 片长变了，关键帧收进时间轴内 */
+  /* 基础版：按当前片段重新编排；高级版：保留手动数据，只把它收进片长内 */
+  if (S.kfMode === 'basic') applyAuto(); else clampKeys();
   tl.dirty = true;                   /* 片段边界与总长都变了，时间轴需重绘 */
 
   player.t = clamp(player.t, 0, scene.total);
@@ -1539,6 +1549,70 @@ function clampKeys() {
   for (const id in S.kf) for (const k of S.kf[id]) k.t = clamp(k.t, 0, T);
 }
 
+/* ---------------- 8.1b 基础版：自动编排 ----------------
+   基础版把「出现方式 × 镜头运动」直接翻译成四通道关键帧，用户不用打点；
+   高级版则是完全手动。两者共用同一套求值器，画面逻辑只有一套。
+     · 速度：按各出现方式的打字手感在段内交替「冲刺—放缓」，段越长脉冲越多；
+     · 缩放：段首 → 段末，相邻段首尾取值相接，段间插值即一次连续运镜；
+     · 旋转：环绕 / 倾斜段从头扫到段末；整片都没有空间运动时该通道留空，
+             继续走镜头运动预设里的细微倾斜。 */
+/* 速度脉冲骨架：a=起手，b=冲刺峰，g=回落谷，c=收尾 */
+const AUTO_SPEED = {
+  type:  { a: 0.86, b: 1.32, g: 0.92, c: 0.78 },
+  word:  { a: 0.90, b: 1.22, g: 0.95, c: 0.84 },
+  line:  { a: 0.93, b: 1.14, g: 0.97, c: 0.88 },
+  block: { a: 0.91, b: 1.18, g: 0.96, c: 0.86 },
+  scan:  { a: 0.94, b: 1.12, g: 0.97, c: 0.90 },
+  focus: { a: 0.93, b: 1.10, g: 0.97, c: 0.91 },
+};
+/* 运镜缩放：段首 → 段末（0.85D）。相邻段首尾刻意取值相接，
+   例如 推近[1.00→1.10] 接 拉远[1.10→1.00]，段间插值即为一次连续运镜。 */
+const AUTO_ZOOM = {
+  still: [1.00, 1.015], push: [1.00, 1.10], pull: [1.10, 1.00],
+  orbit: [0.98, 1.00], tilt: [1.00, 1.02],
+};
+/* 空间旋转：段首 → 段末（0.85D），单位度。倾斜保持“开头即斜、随后归正” */
+const AUTO_ROT = {
+  orbit: { rotY: [15, -6], rotX: [9, 1] },
+  tilt:  { rotY: [24, 0],  rotX: [7, 0] },
+};
+const AUTO_PULSE = 3.4;      /* 速度脉冲周期（秒）：段越长时间轴上脉冲越多 */
+
+function autoKeys() {
+  const K = { speed: [], zoom: [], rotX: [], rotY: [] };
+  const total = scene.total;
+  if (!(total > 0) || !scene.clips.length) return K;
+
+  const spatial = scene.clips.some(c => AUTO_ROT[c.move.id]);
+  for (const c of scene.clips) {
+    /* 速度：段内按脉冲周期交替「冲刺—放缓」，段首略慢、段尾收住 */
+    const sk = AUTO_SPEED[c.reveal.id] || AUTO_SPEED.type;
+    const n = Math.max(2, Math.round(c.typeDur / AUTO_PULSE));
+    for (let k = 0; k <= n; k++) {
+      const v = k === 0 ? sk.a : (k === n ? sk.c : (k % 2 ? sk.b : sk.g));
+      K.speed.push({ t: c.t0 + c.typeDur * k / n, v });
+    }
+    /* 缩放：段首 → 段末，段间插值即为连续运镜 */
+    const z = AUTO_ZOOM[c.move.id] || [1, 1];
+    K.zoom.push({ t: c.t0, v: z[0] }, { t: c.t0 + c.D * 0.85, v: z[1] });
+    /* 旋转：有空间感的段扫过一次；其余段给归位锚点（整片确有空间运动时才接管该通道） */
+    if (spatial) {
+      const r = AUTO_ROT[c.move.id];
+      for (const ch of ['rotY', 'rotX']) {
+        const v = r ? r[ch] : [0, 0];
+        K[ch].push({ t: c.t0, v: v[0] }, { t: c.t0 + c.D * 0.85, v: v[1] });
+      }
+    }
+  }
+  for (const id in K) K[id].sort((a, b) => a.t - b.t);
+  return K;
+}
+
+function applyAuto() {
+  S.kf = autoKeys();
+  tl.dirty = true;
+}
+
 /* ---------------- 8.2 时间轴面板 ----------------
    舞台下方横幅：顶部时间标尺 + 片段条（出现方式 · 镜头运动）+ 四条通道轨道。
    viewBox 与实测宽度同步，所以 SVG 内部坐标 === CSS 像素，
@@ -1637,9 +1711,10 @@ function drawTimeline() {
     P.push(`<line class="tl-mid" x1="${x0}" y1="${ym}" x2="${x1}" y2="${ym}"/>`);
     const pts = tlPoints(i);
     if (pts) P.push(`<polyline class="tl-curve" points="${pts}"/>`);
+    const ro = S.kfMode === 'pro' ? '' : ' ro';
     for (const k of S.kf[c.id]) {
       const on = tl.drag && tl.drag.k === k;
-      P.push(`<circle class="tl-dot${on ? ' on' : ''}" cx="${tlX(k.t).toFixed(1)}" cy="${tlY(i, k.v).toFixed(1)}" r="3.2"/>`);
+      P.push(`<circle class="tl-dot${on ? ' on' : ''}${ro}" cx="${tlX(k.t).toFixed(1)}" cy="${tlY(i, k.v).toFixed(1)}" r="3.2"/>`);
     }
   });
   P.push('</g>');
@@ -1730,6 +1805,7 @@ function bindTimeline() {
     }
     const i = tlTrackAt(p.y);
     if (i < 0) return;
+    if (S.kfMode !== 'pro') { kfHint(); return; }   /* 基础版只读，避免误改自动编排 */
     const j = tlHitKey(i, p.x, p.y);
     if (j < 0) return;                    /* 空白处交给双击新增 */
     mode = 'key';
@@ -1767,6 +1843,7 @@ function bindTimeline() {
 
   svg.addEventListener("dblclick", e => {
     if (!scene.ready) return;
+    if (S.kfMode !== 'pro') { kfHint(); return; }
     const p = tlPos(e);
     const i = tlTrackAt(p.y);
     if (i < 0) return;
@@ -1783,11 +1860,47 @@ function bindTimeline() {
     drawTimeline();
   });
 
-  $("#btnKfClear").addEventListener("click", () => {
-    S.kf = { speed: [], zoom: [], rotX: [], rotY: [] };
-    drawTimeline();
-    toast('已清空关键帧');
+  /* 主按钮双语义：基础版 = 重新自动编排，高级版 = 清空手动关键帧 */
+  $("#btnKfAction").addEventListener("click", () => {
+    if (S.kfMode === 'pro') {
+      S.kf = { speed: [], zoom: [], rotX: [], rotY: [] };
+      tl.dirty = true;
+      drawTimeline();
+      toast('已清空关键帧');
+    } else {
+      applyAuto();
+      drawTimeline();
+      toast('已按当前片段重新编排');
+    }
   });
+}
+
+let kfHinted = false;
+function kfHint() {
+  if (kfHinted) return;
+  kfHinted = true;
+  toast('基础版为自动编排，切到「高级版」即可手动打点');
+}
+
+/* 模式切换：基础版 = 自动编排（轨道只读） / 高级版 = 手动打点 */
+function syncKfUI() {
+  const pro = S.kfMode === 'pro';
+  const seg = $("#kfModeSeg");
+  if (seg) [...seg.children].forEach(b => b.setAttribute('aria-pressed', b.dataset.kf === S.kfMode ? 'true' : 'false'));
+  $("#kfNote").textContent = pro
+    ? '双击轨道加关键帧 · 拖动改时机与数值 · 双击关键帧删除 · 拖标尺定位'
+    : '按出现方式与镜头运动自动编排四通道；改代码或改选择即重算，切「高级版」可手动微调';
+  $("#btnKfAction").textContent = pro ? '清空关键帧' : '重新生成';
+}
+
+function setKfMode(m) {
+  if (S.kfMode === m) return;
+  S.kfMode = m;
+  /* 切到高级版保留当前这批关键帧作为起点，接着手动微调即可 */
+  if (m === 'basic') applyAuto(); else clampKeys();
+  syncKfUI();
+  tl.dirty = true;
+  drawTimeline();
 }
 /* ---------------- 9. 相机与投影 ---------------- */
 /* 光标游标（连续）：单位游标取整后，在相邻两个单位位置之间线性插值。
@@ -2718,7 +2831,12 @@ function bindUI() {
     scheduleBuild(60);
   });
   $("#optAutoCam").addEventListener("change", e => { S.autoCam = e.target.checked; });
+  $("#kfModeSeg").addEventListener("click", e => {
+    const b = e.target.closest('button');
+    if (b && b.dataset.kf) setKfMode(b.dataset.kf);
+  });
   bindTimeline();
+  syncKfUI();
 
   $("#btnPlay").addEventListener("click", () => {
     if (!scene.ready) return;

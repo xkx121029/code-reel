@@ -22,7 +22,9 @@
   | 语法块 | 按语法块出现 | 环绕 | 空间旋转 |
   | 扫描擦除 | 横向擦开 | 倾斜 | 斜切入正 |
   | 聚焦 | 由虚到实 | | |
-- **关键帧时间轴**：舞台下方是四通道关键帧编辑器 —— 速度（0.25~3×）、缩放（0.6~1.6×）、水平旋转与垂直旋转（±25°）。双击轨道空白加关键帧、拖动改时机与数值、双击关键帧删除、拖标尺定位；顶部片段条标出每段的「出现方式 · 镜头运动」。
+- **关键帧时间轴**：舞台下方是四通道关键帧编辑器 —— 速度（0.25~3×）、缩放（0.6~1.6×）、水平旋转与垂直旋转（±25°）。顶部片段条标出每段的「出现方式 · 镜头运动」。
+  - **基础版（自动编排）**：一键把当前「出现方式 × 镜头运动」翻译成整套关键帧 —— 速度按各出现方式的打字手感在段内交替「冲刺—放缓」（段越长脉冲越多，段尾收住），缩放按运动语义从段首走到段末（推近就一直推、段与段首尾相接成一次连贯运镜），环绕 / 倾斜段从头扫到段末（倾斜保持「开头即斜、随后归正」）。改代码或改选择即重算，轨道只读，不用手动打点。
+  - **高级版（手动打点）**：双击轨道空白加关键帧、拖动同时改时机与数值（跟浮动数值气泡）、双击关键帧删除、拖标尺定位；从基础版切换过去会保留那批自动关键帧作为起点。
   - 速度轨道是全局时间轴曲线，但在每段打字区间内按面积归一化：变速只重新分配快慢，不会让哪段代码写不完。
   - 缩放与旋转通道有关键帧时接管相机，没有关键帧的通道继续走镜头运动预设。
 - **清晰渲染**：离屏 Canvas 按设备像素 1:1 绘制代码，再交给 WebGL 做真透视贴图（透视插值由硬件保证，旋转时无拼接接缝）；无旋转且 1:1 时走单次 2D 贴图快路径，像素级锐利。搭配 3D 网格背景与投影轮廓模糊填充的阴影。
@@ -55,6 +57,7 @@ git clone https://gitee.com/xkx1029/code-reel.git
 - **中栏 · 预览舞台**：展示动画画面，下方是关键帧时间轴与播放条（播放 / 暂停、重播、可拖拽的进度条）。
   - 快捷键：`空格` 播放 / 暂停，`R` 重播。
   - 时间轴四条轨道自上而下为速度 / 缩放 / 水平旋转 / 垂直旋转；时间轴坐标与播放条共用同一个播放位置。
+  - 时间轴左上角可在 **基础版**（自动编排，只读）与 **高级版**（手动打点）之间切换；右侧按钮分别是「重新生成」与「清空关键帧」。
 - **右栏 · 参数**：
   - 出现方式与镜头运动（各自可多选，组合成播放序列）
   - 主题、画幅比例、字号、速度
@@ -106,7 +109,7 @@ code_video/
 - Paste code → automatic language detection → syntax highlighting, powered by a small hand-written lexer (no highlight.js / no CDN).
 - 19 languages supported, plus plain text.
 - Two independent dimensions combined into one playback sequence: reveal style (typewriter / word / line / syntax block / scan wipe / focus) × camera move (still / push in / pull out / orbit / tilt).
-- A keyframe timeline under the stage with four channels: speed (0.25–3× time remapping), zoom (0.6–1.6×), yaw and pitch (±25°). Double-click a track to add a keyframe, drag to retime or revalue it, double-click a keyframe to delete, drag the ruler to scrub.
+- A keyframe timeline under the stage with four channels: speed (0.25–3× time remapping), zoom (0.6–1.6×), yaw and pitch (±25°). Two modes: **Basic** auto-writes the whole arrangement from the current reveal × camera move selections (read-only, recomputed whenever the code or selection changes), **Pro** lets you double-click a track to add a keyframe, drag to retime or revalue it, double-click a keyframe to delete, and drag the ruler to scrub. Switching Basic → Pro keeps the generated keyframes as a starting point.
 - Crisp text at any rotation: code is drawn at device-pixel scale on an offscreen canvas and perspective-mapped by WebGL (no slice seams), with a 2D fast path for unrotated 1:1 shots.
 - 5 color themes, 3 aspect ratios (16:9 / 9:16 / 1:1), adjustable speed and font size.
 - Export via `MediaRecorder` to WebM (Chrome / Edge work best).
@@ -116,6 +119,13 @@ Just open `index.html` in a modern browser. Licensed under the MIT License.
 ---
 
 ## 更新日志
+
+### 2026-09-19 · 基础版自动编排 / 高级版手动打点
+
+- 时间轴分成两种模式：**基础版**（默认）按当前「出现方式 × 镜头运动」自动生成整套四通道关键帧，轨道只读、改代码即重算；**高级版**保留原有手动打点方式，切过去会带着自动生成的那批关键帧继续微调。
+- 自动编排规则：速度在段内按周期交替「冲刺—放缓」并收住段尾；缩放从段首走到段末，相邻段首尾取值相接（推近 1.00→1.10 接拉远 1.10→1.00）；环绕 / 倾斜段从头扫到段末，其余段给归位锚点；整片没有空间运动时旋转通道留空，继续走镜头运动预设。
+- 时间轴左上角新增模式切换，右侧主按钮随模式变为「重新生成」/「清空关键帧」；基础版下点击轨道会提示切到高级版。
+- 手动求值与自动编排共用同一套关键帧求值器与渲染路径，两种模式画面逻辑完全一致。
 
 ### 2026-09-19 · 关键帧时间轴
 
