@@ -141,6 +141,7 @@ select:focus{border-color:var(--line-2)}
 }
 .tl-head .note{margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tl-head .btn{flex:0 0 auto;padding:3px 10px;font-size:11px;border-radius:7px}
+.tl-head .btn[aria-pressed="true"]{color:var(--txt);border-color:var(--accent-dim);background:rgba(232,102,58,.08)}
 .tl-seg{flex:0 0 auto;width:128px;border-radius:7px}
 .tl-seg button{padding:3px 0;font-size:11px;letter-spacing:0}
 .tl-svg{display:block;width:100%;touch-action:none;cursor:crosshair}
@@ -157,6 +158,7 @@ select:focus{border-color:var(--line-2)}
 .tl-dot.on{fill:var(--accent)}
 .tl-dot.sel{fill:var(--accent);stroke:var(--txt);stroke-width:1.2}
 .tl-sel{stroke:var(--accent);stroke-width:1;stroke-dasharray:3 3;opacity:.75}
+.tl-snap{stroke:var(--txt);stroke-width:1;stroke-dasharray:1 3;opacity:.5}
 .tl-dot.pick{cursor:pointer}
 .tl-caret{stroke:var(--txt);stroke-width:1.1;opacity:.85}
 .tl-caretmark{fill:var(--txt);opacity:.85}
@@ -266,6 +268,7 @@ canvas.dragging{cursor:grabbing}
           <button data-kf="pro" aria-pressed="false" title="手动打点，可自由裁剪节奏">高级版</button>
         </div>
         <span class="note" id="kfNote"></span>
+        <button class="btn btn-ghost" id="btnSnap" aria-pressed="true" title="吸附到片段边界 / 播放头 / 刻度 / 其他关键帧；按住 Alt 临时关闭">吸附</button>
         <button class="btn btn-ghost" id="btnKfAction">重新生成</button>
       </div>
       <svg class="tl-svg" id="tlSvg"></svg>
@@ -1057,7 +1060,8 @@ const S = {
   autoCam: false,        // 自动运镜（3D 缓慢漂移）
   /* 关键帧：按通道分开，键为 { t: 全局时间轴秒数, v: 数值 }，t 升序 */
   kf: { speed: [], zoom: [], rotX: [], rotY: [] },
-  kfMode: 'basic',       // basic=自动编排（只读） | pro=手动打点
+  kfMode: 'basic',       // basic=自动编排 | pro=手动打点
+  snap: true,            // 关键帧拖动/选点/定位是否吸附
   ratio: 16 / 9,
   empty: false,
 };
@@ -1702,6 +1706,7 @@ const tl = {
   gutter: 54, right: 10, rulerH: 16, clipH: 14, trackH: 26,
   head: null, headMark: null, drag: null,
   sel: null,          /* 选点：{ t, ch, k } —— 拖动画布视角就写到这个时刻 */
+  snapT: null, snapV: null, snapCh: null,   /* 吸附中的参考线（跨帧保留，松手即清） */
 };
 
 function tlTrackY(i) { return tl.rulerH + tl.clipH + i * tl.trackH; }
@@ -1728,6 +1733,56 @@ function tlVal(i, y) {
   const y0 = tlTrackY(i) + 4, h = tl.trackH - 9;
   const n = clamp((y - y0) / h, 0, 1);
   return c.log ? c.max * Math.pow(c.min / c.max, n) : c.max - (c.max - c.min) * n;
+}
+
+/* ---------------- 8.2.1 吸附 ----------------
+   拖动关键帧、选点、拖标尺时贴到「有意义的位置」上：
+     时间：片段起点 / 打字结束 / 片段结束、播放头、时间刻度、其他通道的关键帧；
+     数值：通道基准值（匀速 1×、不缩放 1×、不旋转 0°）与同通道其他关键帧的值。
+   数值不做步进网格吸附：轨道只有 17px 高，旋转 1° 只占 0.2px，
+   网格会比手还密，等于强制吸附、反而拖不动。
+   阈值 7px，已经吸住之后放宽到 12px —— 否则在阈值边缘会来回抖。
+   同通道的关键帧不参与时间吸附，避免两点叠在同一时刻。 */
+const SNAP_PX = 7, SNAP_OUT_PX = 12;
+
+function snapOn(e) { return S.snap && !(e && e.altKey); }
+
+/* 时间吸附候选；withHead=false 时不含播放头（拖标尺定位用，否则会自己吸自己） */
+function snapTimes(ch, withHead) {
+  const list = [];
+  if (withHead && !player.playing) list.push(player.t);   /* 播放中播放头在跑，不做吸附目标 */
+  for (const c of scene.clips) list.push(c.t0, c.t0 + c.typeDur, c.t0 + c.D);
+  const span = Math.max(10, tl.W - tl.gutter - tl.right);
+  const step = tlStep(Math.max(0.001, scene.total), span);
+  const n = Math.floor(scene.total / step + 1e-6);
+  for (let k = 0; k <= n; k++) list.push(+(k * step).toFixed(4));
+  for (const id in S.kf) {
+    if (id === ch) continue;
+    for (const k of S.kf[id]) list.push(k.t);
+  }
+  return list;
+}
+
+function snapVals(ch, exclude) {
+  const c = CH.find(x => x.id === ch);
+  const out = [c.def];                       /* 吸附回基准值：匀速 / 不缩放 / 不旋转 */
+  for (const k of S.kf[ch]) if (k !== exclude) out.push(k.v);
+  return out;
+}
+
+/* 在候选里挑最近的一个；sticky=true 表示上次已经吸住，用更宽的退出阈值 */
+function snapPick(list, dist, sticky) {
+  let best = null, bd = sticky ? SNAP_OUT_PX : SNAP_PX;
+  for (const v of list) {
+    const d = dist(v);
+    if (d <= bd) { bd = d; best = v; }
+  }
+  return best;
+}
+
+/* 一次性吸附（选点 / 拖标尺用） */
+function snapTimeAt(x, ch, withHead) {
+  return snapPick(snapTimes(ch, withHead), v => Math.abs(tlX(v) - x), false);
 }
 
 /* 刻度步长：相邻标签至少隔开约 62px，取整到 1/2/5×10ⁿ 秒 */
@@ -1807,6 +1862,16 @@ function drawTimeline() {
     P.push(`<text class="tl-lab" x="2" y="${(tlTrackY(i) + tl.trackH / 2 + 3.4).toFixed(1)}">${c.label}</text>`);
   });
 
+  /* 吸附参考线：贴上了哪条边界一眼可见 */
+  if (tl.snapT != null) {
+    const sx = tlX(tl.snapT).toFixed(1);
+    P.push(`<line class="tl-snap" x1="${sx}" y1="0" x2="${sx}" y2="${H}"/>`);
+  }
+  if (tl.snapV != null && tl.snapCh != null) {
+    const sy = tlY(tl.snapCh, tl.snapV).toFixed(1);
+    P.push(`<line class="tl-snap" x1="${x0}" y1="${sy}" x2="${x1}" y2="${sy}"/>`);
+  }
+
   /* 选点竖线：让“视角会写到哪一刻”一眼可见 */
   if (tl.sel) {
     const sx = tlX(tl.sel.t).toFixed(1);
@@ -1845,12 +1910,18 @@ function updatePlayhead() {
   if (tl.headMark) tl.headMark.setAttribute('points', `${xs},0 ${(x - 4).toFixed(1)},5.5 ${(x + 4).toFixed(1)},5.5`);
 }
 
-/* 拖标尺定位：与播放条共用同一个 player.t */
-function scrubTo(x) {
+/* 拖标尺定位：与播放条共用同一个 player.t，同样吸附到片段边界/刻度/关键帧 */
+function scrubTo(x, e) {
   if (!scene.ready) return;
   player.playing = false;
   updatePlayIcon();
-  player.t = clamp(tlT(x), 0, scene.total);
+  let t = tlT(x);
+  tl.snapT = null;
+  if (snapOn(e)) {
+    const st = snapTimeAt(x, null, false);   /* 不含播放头，否则会自己吸自己 */
+    if (st != null) { t = st; tl.snapT = st; }
+  }
+  player.t = clamp(t, 0, scene.total);
   $("#scrub").value = String(Math.round(player.t * 1000));
   if (tl.sel) { tl.sel = null; syncKfUI(); tl.dirty = true; }   /* 定位与被选中的落点不再同步 */
   updatePlayhead();
@@ -1888,7 +1959,7 @@ function bindTimeline() {
     if (p.y < tl.rulerH + tl.clipH) {     /* 标尺 / 片段条：定位 */
       mode = 'ruler';
       try { svg.setPointerCapture(e.pointerId); } catch (err) { }
-      scrubTo(p.x);
+      scrubTo(p.x, e);
       e.preventDefault();
       return;
     }
@@ -1898,14 +1969,18 @@ function bindTimeline() {
     if (S.kfMode !== 'pro') {
       /* 基础版：点已有的点就选中它，点空白就选这一刻（真正落点在拖完视角时写下） */
       const ks = S.kf[CH[i].id];
-      const t = j >= 0 ? ks[j].t : clamp(tlT(p.x), 0, scene.total);
+      let t = j >= 0 ? ks[j].t : clamp(tlT(p.x), 0, scene.total);
+      if (j < 0 && snapOn(e)) {
+        const st = snapTimeAt(p.x, CH[i].id, true);
+        if (st != null) t = clamp(st, 0, scene.total);
+      }
       selectAt(t, j >= 0 ? CH[i].id : null, j >= 0 ? ks[j] : null);
       e.preventDefault();
       return;
     }
     if (j < 0) return;                    /* 空白处交给双击新增 */
     mode = 'key';
-    tl.drag = { ch: CH[i].id, idx: j, k: S.kf[CH[i].id][j] };
+    tl.drag = { ch: CH[i].id, idx: j, k: S.kf[CH[i].id][j], st: false, sv: false };
     try { svg.setPointerCapture(e.pointerId); } catch (err) { }
     drawTimeline();
     e.preventDefault();
@@ -1914,13 +1989,28 @@ function bindTimeline() {
   svg.addEventListener("pointermove", e => {
     if (!mode) return;
     const p = tlPos(e);
-    if (mode === 'ruler') { scrubTo(p.x); return; }
+    if (mode === 'ruler') { scrubTo(p.x, e); return; }
     const i = CH.findIndex(c => c.id === tl.drag.ch);
     const k = tl.drag.k;
-    k.t = clamp(tlT(p.x), 0, Math.max(0.05, scene.total));
-    k.v = tlVal(i, p.y);
+    const ch = tl.drag.ch;
+    let t = clamp(tlT(p.x), 0, Math.max(0.05, scene.total));
+    let v = tlVal(i, p.y);
+    tl.snapT = tl.snapV = null;
+    if (snapOn(e)) {
+      /* 时间：片段边界 / 播放头 / 刻度 / 其他通道的点；数值：基准值 / 整步进 / 同通道其他点 */
+      const st = snapPick(snapTimes(ch, true), x => Math.abs(tlX(x) - p.x), tl.drag.st);
+      tl.drag.st = st != null;
+      if (st != null) { t = clamp(st, 0, Math.max(0.05, scene.total)); tl.snapT = t; }
+      const sv = snapPick(snapVals(ch, k), x => Math.abs(tlY(i, x) - p.y), tl.drag.sv);
+      tl.drag.sv = sv != null;
+      if (sv != null) { v = sv; tl.snapV = sv; tl.snapCh = i; }
+    } else {
+      tl.drag.st = tl.drag.sv = false;
+    }
+    k.t = t;
+    k.v = v;
     /* 越过邻居时交换次序：关键帧始终按时间升序，拖动不设硬性间隔 */
-    const arr = S.kf[tl.drag.ch];
+    const arr = S.kf[ch];
     arr.sort((a, b) => a.t - b.t);
     tl.drag.idx = arr.indexOf(k);
     drawTimeline();
@@ -1931,6 +2021,7 @@ function bindTimeline() {
     if (!mode) return;
     mode = null;
     tl.drag = null;
+    tl.snapT = tl.snapV = null;
     try { svg.releasePointerCapture(e.pointerId); } catch (err) { }
     drawTimeline();
   };
@@ -2005,7 +2096,7 @@ function syncKfUI() {
   $("#kfNote").textContent = sel
     ? '已选点 ' + sel.t.toFixed(2) + 's · 拖动画布视角即写入旋转关键帧（Esc 取消）'
     : (pro
-      ? '双击轨道加关键帧 · 拖动改时机与数值 · 双击关键帧删除 · 拖标尺定位'
+      ? '双击轨道加关键帧 · 拖动改时机与数值（自动吸附）· 双击关键帧删除 · 拖标尺定位'
       : '四通道已自动编排；点轨道选点后拖动画布视角即可写入');
   $("#btnKfAction").textContent = pro ? '清空关键帧' : '重新生成';
 }
@@ -2958,6 +3049,11 @@ function bindUI() {
   $("#kfModeSeg").addEventListener("click", e => {
     const b = e.target.closest('button');
     if (b && b.dataset.kf) setKfMode(b.dataset.kf);
+  });
+  $("#btnSnap").addEventListener("click", () => {
+    S.snap = !S.snap;
+    $("#btnSnap").setAttribute("aria-pressed", S.snap ? "true" : "false");
+    toast(S.snap ? '吸附已开启' : '吸附已关闭（按住 Alt 亦可临时关闭）');
   });
   bindTimeline();
   syncKfUI();

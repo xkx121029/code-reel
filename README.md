@@ -26,6 +26,7 @@
   - **基础版（自动编排）**：一键把当前「出现方式 × 镜头运动」翻译成整套关键帧 —— 速度按各出现方式的打字手感在段内交替「冲刺—放缓」（段越长脉冲越多，段尾收住），缩放按运动语义从段首走到段末（推近就一直推、段与段首尾相接成一次连贯运镜），环绕 / 倾斜段从头扫到段末（倾斜保持「开头即斜、随后归正」）。改代码或改选择即重算，不用手动打点。
   - **拖动画布视角即写入**：把画面拖到满意的角度松手，这段角度就固化成旋转关键帧（同时写入水平与垂直旋转），临时视角随之清零，画面不会有任何跳变。点轨道上的点或空白先选一个时刻，就写到那一刻；基础版没选点时自动落在当前时刻。整片此前没有旋转关键帧的话，会先按段采样一次原运镜基线，避免一个点把整片角度都带跑。
   - **高级版（手动打点）**：双击轨道空白加关键帧、拖动同时改时机与数值（跟浮动数值气泡）、双击关键帧删除、拖标尺定位；从基础版切换过去会保留那批自动关键帧作为起点。手动点（含拖视角写入的）在基础版重算时会被保留，不会被自动编排覆盖。
+  - **吸附**：拖动关键帧、点轨道选点、拖标尺都会自动贴到有意义的位置 —— 时间贴片段起点 / 打字结束 / 片段结束、播放头、时间刻度、其他通道的关键帧；数值贴通道基准值（1× / 1× / 0°）与同通道其他关键帧的值。阈值 7px、已吸住后放宽到 12px（不会在边缘抖），吸附时有参考线提示，点「吸附」按钮或按住 `Alt` 可关闭。
   - 速度轨道是全局时间轴曲线，但在每段打字区间内按面积归一化：变速只重新分配快慢，不会让哪段代码写不完。
   - 缩放与旋转通道有关键帧时接管相机，没有关键帧的通道继续走镜头运动预设。
 - **清晰渲染**：离屏 Canvas 按设备像素 1:1 绘制代码，再交给 WebGL 做真透视贴图（透视插值由硬件保证，旋转时无拼接接缝）；无旋转且 1:1 时走单次 2D 贴图快路径，像素级锐利。搭配 3D 网格背景与投影轮廓模糊填充的阴影。
@@ -113,6 +114,7 @@ code_video/
 - Two independent dimensions combined into one playback sequence: reveal style (typewriter / word / line / syntax block / scan wipe / focus) × camera move (still / push in / pull out / orbit / tilt).
 - A keyframe timeline under the stage with four channels: speed (0.25–3× time remapping), zoom (0.6–1.6×), yaw and pitch (±40°). Two modes: **Basic** auto-writes the whole arrangement from the current reveal × camera move selections (recomputed whenever the code or selection changes), **Pro** lets you double-click a track to add a keyframe, drag to retime or revalue it, double-click a keyframe to delete, and drag the ruler to scrub. Switching Basic → Pro keeps the generated keyframes as a starting point.
 - **Drag the canvas to write keyframes**: release the mouse and the angle you dragged to is baked into the yaw/pitch keyframes, the temporary view resets, and the picture does not jump. Click a keyframe or empty track first to choose the moment it is written to.
+- **Snapping** (on by default, toggle in the timeline header, `Alt` to bypass): times snap to clip start / typing end / clip end, the playhead, ruler ticks and keyframes of the other channels; values snap to the channel baseline (1× / 1× / 0°) and to other keyframes of the same channel. 7px engage radius, 12px release radius, with guide lines while snapped.
 - Crisp text at any rotation: code is drawn at device-pixel scale on an offscreen canvas and perspective-mapped by WebGL (no slice seams), with a 2D fast path for unrotated 1:1 shots.
 - 5 color themes, 3 aspect ratios (16:9 / 9:16 / 1:1), adjustable speed and font size.
 - Export via `MediaRecorder` to WebM (Chrome / Edge work best).
@@ -122,6 +124,14 @@ Just open `index.html` in a modern browser. Licensed under the MIT License.
 ---
 
 ## 更新日志
+
+### 2026-09-19 · 关键帧吸附
+
+- 时间吸附：拖动关键帧、基础版选点、拖标尺定位时，自动贴到片段起点 / 打字结束 / 片段结束、播放头（播放中除外）、时间刻度、其他通道的关键帧；同通道的关键帧不参与，避免两点叠在同一时刻。
+- 数值吸附：贴到通道基准值（匀速 1×、不缩放 1×、不旋转 0°）与同通道其他关键帧的值，方便对齐多个点的角度。
+- 阈值 7px，已经吸住后放宽到 12px 再脱开，避免在阈值边缘来回抖；吸附时画出参考线（时间竖线 / 数值横线），松手即消失。
+- 时间轴头部新增「吸附」开关（默认开启），按住 `Alt` 拖动可临时关闭。
+- 不做数值步进网格吸附：轨道只有 17px 高，旋转 1° 只占 0.2px，网格会比手还密、等于强制吸附。
 
 ### 2026-09-19 · 拖动画布视角即写入关键帧
 
