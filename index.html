@@ -325,7 +325,7 @@ canvas.dragging{cursor:grabbing}
         <span class="val" id="viewVal">0° · 0° · 0</span>
       </div>
       <button class="btn btn-ghost" id="btnResetView" style="width:100%">复位视角</button>
-      <p class="note" style="margin:9px 0 0">拖动画面即把视角写入旋转关键帧（先在时间轴选点则写到那一刻）；滚轮调远近只是临时视角，双击复位。</p>
+      <p class="note" style="margin:9px 0 0">拖动画面即把视角写入旋转关键帧（先在时间轴选点则写到那一刻）；视角最多转到 ±89°，不会翻到背面。滚轮调远近只是临时视角，双击复位。</p>
       <label class="switch mt10"><span>随光标跟随</span><input type="checkbox" id="optFollow"></label>
       <label class="switch"><span>自动运镜（3D）</span><input type="checkbox" id="optAutoCam"></label>
       <label class="switch"><span>行号</span><input type="checkbox" id="optGutter" checked></label>
@@ -1068,12 +1068,17 @@ const S = {
 const CH = [
   { id: 'speed', label: '速度', min: 0.25, max: 3.0, log: true, def: 1, fmt: v => v.toFixed(2) + '×' },
   { id: 'zoom', label: '缩放', min: 0.60, max: 1.6, log: false, def: 1, fmt: v => v.toFixed(2) + '×' },
-  /* 旋转不设角度上限：min/max 只是基准显示范围，实际范围随数据自动外扩（见 chSpan） */
+  /* 旋转只给基准显示范围，实际范围随数据自动外扩（见 chSpan），硬上限是 ROT_MAX */
   { id: 'rotY', label: '水平旋转', min: -40, max: 40, log: false, def: 0, auto: true, fmt: v => v.toFixed(1) + '°' },
   { id: 'rotX', label: '垂直旋转', min: -40, max: 40, log: false, def: 0, auto: true, fmt: v => v.toFixed(1) + '°' },
 ];
 const DEG = Math.PI / 180;
 const KF_HIT = 9;             /* 关键帧命中半径（CSS 像素） */
+/* 旋转上限：合成角度（镜头基线 + 临时视角 + 自动运镜）不许越过 ±89°，
+   否则平面会翻过去露出背面（也避免正好 90° 时画面塌成一条线）。
+   到这个上限之前完全自由，所以仍然可以“转到很侧”但不越界。 */
+const ROT_MAX = 89;
+const VIEW_MAX = ROT_MAX * DEG;
 
 const scene = {
   ready: false,
@@ -1090,13 +1095,29 @@ const scene = {
 const player = { t: 0, playing: false, last: 0, recording: false };
 
 /* 用户视角：叠加在动画相机之上（拖动转视角 / 滚轮调距离）
-   角度不设上限（拖动画布可转到任意角度），只有距离仍受限（不能穿过相机） */
+   角度可在 ±89° 内自由转但不会翻到背面，距离同样受限（不能穿过相机） */
 const view3d = { rotX: 0, rotY: 0, dist: 0 };
 
 /* 滚轮远近范围随镜头距离等比缩放，保证“贴近/远离”的手感一致 */
 function distLimit() {
   const p = scene.persp || 1500;
   return [-0.43 * p, 0.30 * p];
+}
+
+/* 拖动画布时的可动范围：与当前时刻的镜头基线相加后不越过 ±89°，
+   所以天然拖不到背面；基线本身越界（旧数据）时也还能把视角拉回来。 */
+function limitView() {
+  const loc = scene.ready ? locate(player.t) : null;
+  const b = loc ? cameraFor(loc.clip, loc.te, player.t) : { rotX: 0, rotY: 0 };
+  view3d.rotY = clamp(view3d.rotY, -VIEW_MAX - b.rotY, VIEW_MAX - b.rotY);
+  view3d.rotX = clamp(view3d.rotX, -VIEW_MAX - b.rotX, VIEW_MAX - b.rotX);
+}
+
+/* 兜底：任何来源（关键帧数据、自动运镜叠加）都不许越过 ±89° */
+function clampViewMax(cam) {
+  cam.rotX = clamp(cam.rotX, -VIEW_MAX, VIEW_MAX);
+  cam.rotY = clamp(cam.rotY, -VIEW_MAX, VIEW_MAX);
+  return cam;
 }
 
 function applyView3D(cam) {
@@ -1635,6 +1656,8 @@ function applyAuto() {
    写入前先把基线按段采样一次（通道原本由镜头运动预设驱动时），
    否则只打一个点会让整片都变成这个角度。 */
 function setKfAt(ch, t, v) {
+  const c = CH.find(x => x.id === ch);
+  if (c && c.auto) v = rotClamp(v);        /* 旋转通道统一收口，翻不到背面 */
   const arr = S.kf[ch];
   let k = null;
   for (const x of arr) if (Math.abs(x.t - t) < 0.05) { k = x; break; }
@@ -1667,9 +1690,9 @@ function bakeView(fallbackT) {
   const loc = locate(t);
   if (!loc) return false;
   const base = cameraFor(loc.clip, loc.te, t);      /* 不含临时视角与自动运镜 */
-  /* 角度原样写入，不做截断：旋转通道的显示范围会随数据自动外扩 */
-  const wx = (base.rotX + view3d.rotX) / DEG;
-  const wy = (base.rotY + view3d.rotY) / DEG;
+  /* 写入合成角度（限在 ±89° 内，翻不到背面）；拖动时已被同样限制，所以不会跳变 */
+  const wx = rotClamp((base.rotX + view3d.rotX) / DEG);
+  const wy = rotClamp((base.rotY + view3d.rotY) / DEG);
 
   if (!S.kf.rotX.length) seedBaseline('rotX');
   if (!S.kf.rotY.length) seedBaseline('rotY');
@@ -1703,16 +1726,18 @@ const tl = {
 
 function tlTrackY(i) { return tl.rulerH + tl.clipH + i * tl.trackH; }
 
-/* 轨道纵向范围。速度、缩放是固定值域；旋转只有基准范围，实际范围随数据外扩 ——
-   拖动视角不设角度上限，写进来的角度也必须看得见。 */
+/* 轨道纵向范围。速度、缩放是固定值域；旋转只有基准范围，实际范围随数据外扩，
+   但不超过 ROT_MAX —— 轨道顶端就是“不能再转过去”的那条线。 */
 function chSpan(ch) {
   const c = CH.find(x => x.id === ch) || CH[0];
   if (!c.auto) return c;
   let m = 0;
   for (const k of S.kf[ch]) m = Math.max(m, Math.abs(k.v));
-  const lim = Math.max(c.max, Math.ceil((m + 10) / 10) * 10);
+  const lim = Math.min(ROT_MAX, Math.max(c.max, Math.ceil((m + 10) / 10) * 10));
   return { min: -lim, max: lim };
 }
+/* 写入旋转通道前统一夹取，保证任何途径的数据都不越界 */
+function rotClamp(v) { return clamp(v, -ROT_MAX, ROT_MAX); }
 
 /* 拖动期间冻结范围，否则指针位置与数值的对应关系会在拖动中跳变 */
 function refreshSpans() { tl.spans = CH.map(c => chSpan(c.id)); }
@@ -2017,7 +2042,7 @@ function bindTimeline() {
       tl.drag.st = tl.drag.sv = false;
     }
     k.t = t;
-    k.v = v;
+    k.v = CH[i].auto ? rotClamp(v) : v;      /* 旋转通道到 ±89° 为止，翻不到背面 */
     /* 越过邻居时交换次序：关键帧始终按时间升序，拖动不设硬性间隔 */
     const arr = S.kf[ch];
     arr.sort((a, b) => a.t - b.t);
@@ -2060,7 +2085,8 @@ function bindTimeline() {
       arr.splice(j, 1);
     } else {
       const t = clamp(tlT(p.x), 0, Math.max(0.05, scene.total));
-      if (!arr.some(k => Math.abs(k.t - t) < 0.02)) arr.push({ t, v: tlVal(i, p.y) });
+      const v = tlVal(i, p.y);
+      if (!arr.some(k => Math.abs(k.t - t) < 0.02)) arr.push({ t, v: ch.auto ? rotClamp(v) : v });
       arr.sort((a, b) => a.t - b.t);
     }
     drawTimeline();
@@ -2766,7 +2792,7 @@ function renderAt(t) {
 
   drawPlane(clip, te, u, t);
 
-  const cam = applyAutoCam(applyView3D(cameraFor(clip, te, t)), t);
+  const cam = clampViewMax(applyAutoCam(applyView3D(cameraFor(clip, te, t)), t));
   const proj = makeProjector(cam);
 
   if (S.shadow) {
@@ -2924,9 +2950,10 @@ function bindView3D() {
     drag.x = e.clientX; drag.y = e.clientY;
     drag.moved = drag.moved || Math.abs(dx) + Math.abs(dy) > 1;
     /* “抓住平面拖动”的手感：向右拖右侧靠近观察者，向下拖下缘靠近观察者；
-     角度不做限制，可以一路转到任意角度 */
+     角度在 ±89° 内任意转，但不会翻到平面背面 */
     view3d.rotY -= dx * 0.0065;
     view3d.rotX += dy * 0.0050;
+    limitView();
     updateViewLabel();
   });
   cv.addEventListener("pointerup", e => {
