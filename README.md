@@ -22,12 +22,12 @@
   | 语法块 | 按语法块出现 | 环绕 | 空间旋转 |
   | | | 倾斜 | 斜切入正 |
 - **关键帧时间轴**：舞台下方是四通道关键帧编辑器 —— 速度（0.25~3×）、缩放（0.6~1.6×）、水平旋转与垂直旋转（**±89° 内自由**，轨道显示范围随数据自动外扩）。顶部片段条标出每段的「出现方式 · 镜头运动」。
-  - **基础版（自动编排）**：一键把当前「出现方式 × 镜头运动」翻译成整套关键帧 —— 速度按各出现方式的打字手感在段内交替「冲刺—放缓」（段越长脉冲越多，段尾收住），缩放按运动语义从段首走到段末（推近就一直推、段与段首尾相接成一次连贯运镜），环绕 / 倾斜段从头扫到段末（倾斜保持「开头即斜、随后归正」）。改代码或改选择即重算，不用手动打点。
+  - **自动编排（默认值）**：把当前「出现方式 × 镜头运动」直接翻译成整套关键帧 —— 速度按各出现方式的打字手感在段内交替「冲刺—放缓」（段越长脉冲越多，段尾收住），缩放按运动语义从段首走到段末（推近就一直推、段与段首尾相接成一次连贯运镜），环绕 / 倾斜段从头扫到段末（倾斜保持「开头即斜、随后归正」）。改代码或改选择即重算，你也可以随时手动编辑，**自己碰过的点（拖动 / 新增 / 拖视角写入）会被标记并保留**，不会被重算冲掉。
   - **拖动画布视角即写入**：把画面拖到满意的角度松手，这段角度就固化成旋转关键帧，临时视角随之清零，画面不会有任何跳变。规则统一为一条 —— 先在时间轴选点就写到那一刻，没选点就以当前时刻为落点；**按下时就把落点定下来并画出标记、同时暂停播放**，所以落点、看的画面、写进去的角度三者始终一致。
   - **只写真正拖动的方向**：横拖只写水平旋转、纵拖只写垂直旋转（阈值 2px ≈ 0.6°），不会顺手把另一条轴也钉住。
   - **按住 `Alt` 拖动只预览**：不暂停、不落点、不写数据，临时视角留着，双击画面或「复位视角」即可清掉。
   - **拖动可在 ±89° 内自由转，不会翻到平面背面**（正好 90° 会让画面塌成一条线，所以留 1° 余量）。整片此前没有旋转关键帧的话，会先按段采样一次原运镜基线，避免一个点把整片角度都带跑。
-  - **高级版（手动打点）**：双击轨道空白加关键帧、拖动同时改时机与数值（跟浮动数值气泡）、双击关键帧删除、拖标尺定位；从基础版切换过去会保留那批自动关键帧作为起点。手动点（含拖视角写入的）在基础版重算时会被保留，不会被自动编排覆盖。
+  - **轨道随时可编辑**：双击轨道空白加关键帧、拖动同时改时机与数值（跟浮动数值气泡）、双击关键帧删除、点空白选点、拖标尺定位。没有模式开关 —— 自动编排只是「随时可再生的默认值」，想从头自己摆就点「清空」（同时会停下自动编排，避免改代码又被塞回来），想要回默认就点「重新编排」。
   - **吸附**：拖动关键帧、点轨道选点、拖标尺都会自动贴到有意义的位置 —— 时间贴片段起点 / 打字结束 / 片段结束、播放头、时间刻度、其他通道的关键帧；数值贴通道基准值（1× / 1× / 0°）与同通道其他关键帧的值。阈值 7px、已吸住后放宽到 12px（不会在边缘抖），吸附时有参考线提示，点「吸附」按钮或按住 `Alt` 可关闭。
   - 速度轨道是全局时间轴曲线，但在每段打字区间内按面积归一化：变速只重新分配快慢，不会让哪段代码写不完。
   - 缩放与旋转通道有关键帧时接管相机，没有关键帧的通道继续走镜头运动预设。
@@ -61,8 +61,8 @@ git clone https://gitee.com/xkx1029/code-reel.git
 - **中栏 · 预览舞台**：展示动画画面，下方是关键帧时间轴与播放条（播放 / 暂停、重播、可拖拽的进度条）。
   - 快捷键：`空格` 播放 / 暂停，`R` 重播。
   - 时间轴四条轨道自上而下为速度 / 缩放 / 水平旋转 / 垂直旋转；时间轴坐标与播放条共用同一个播放位置。
-  - 时间轴左上角可在 **基础版**（自动编排）与 **高级版**（手动打点）之间切换；右侧按钮分别是「重新生成」与「清空关键帧」。
-  - 基础版下点轨道上的点或空白即选中一个时刻（播放头同步过去，`Esc` 取消），随后在画面上拖动视角就会把角度写到那一刻；双击已有点可删除。
+  - 时间轴右侧是「吸附」「重新编排」「清空」三个按钮 —— 没有模式切换，四通道随时可编辑。
+  - 点轨道空白即选中一个时刻（播放头同步过去，`Esc` 取消），随后在画面上拖动视角就会把角度写到那一刻；双击空白加关键帧、双击已有点删除。
 - **右栏 · 参数**：
   - 出现方式与镜头运动（各自可多选，组合成播放序列）
   - 主题、画幅比例、字号、速度
@@ -114,7 +114,7 @@ code_video/
 - Paste code → automatic language detection → syntax highlighting, powered by a small hand-written lexer (no highlight.js / no CDN).
 - 19 languages supported, plus plain text.
 - Two independent dimensions combined into one playback sequence: reveal style (typewriter / word / line / syntax block) × camera move (still / push in / pull out / orbit / tilt).
-- A keyframe timeline under the stage with four channels: speed (0.25–3× time remapping), zoom (0.6–1.6×), yaw and pitch (free within ±89°, so the plane never flips to its back side — the track range expands automatically to fit the data). Two modes: **Basic** auto-writes the whole arrangement from the current reveal × camera move selections (recomputed whenever the code or selection changes), **Pro** lets you double-click a track to add a keyframe, drag to retime or revalue it, double-click a keyframe to delete, and drag the ruler to scrub. Switching Basic → Pro keeps the generated keyframes as a starting point.
+- A keyframe timeline under the stage with four channels: speed (0.25–3× time remapping), zoom (0.6–1.6×), yaw and pitch (free within ±89°, so the plane never flips to its back side — the track range expands automatically to fit the data). One single mode: auto-arrangement writes a full default set from the current reveal × camera move selections and is recomputed whenever the code or selection changes, while the tracks stay editable the whole time (double-click to add, drag to retime/revalue, double-click to delete, drag the ruler to scrub). Anything you touch is flagged and survives recomputation; "Clear" empties the tracks and pauses the auto-arrangement, "Re-arrange" brings it back.
 - **Drag the canvas to write keyframes**: press to lock the target moment (a picked point if you have one, otherwise the current time) — the marker appears and playback pauses, so the target, the frame you see and the angle written all agree. Release to bake the angle into the yaw/pitch keyframes, only for the axes you actually dragged; the temporary view resets and the picture does not jump. Hold `Alt` while dragging to preview without writing anything.
 - **Snapping** (on by default, toggle in the timeline header, `Alt` to bypass): times snap to clip start / typing end / clip end, the playhead, ruler ticks and keyframes of the other channels; values snap to the channel baseline (1× / 1× / 0°) and to other keyframes of the same channel. 7px engage radius, 12px release radius, with guide lines while snapped.
 - Crisp text at any rotation: code is drawn at device-pixel scale on an offscreen canvas and perspective-mapped by WebGL (no slice seams), with a 2D fast path for unrotated 1:1 shots.
@@ -126,6 +126,15 @@ Just open `index.html` in a modern browser. Licensed under the MIT License.
 ---
 
 ## 更新日志
+
+### 2026-09-19 · 两种模式合并为一套
+
+- 去掉「基础版 / 高级版」开关：自动编排变成「随时可再生的默认编排」，轨道**始终可编辑**（双击加、拖动改、双击删），拖动画布写入视角也始终生效 —— 一套界面、一套规则。
+- 你碰过的点会打上手打标记：轨道上新增 / 拖动过的点、拖视角写入的点与基线锚点，在自动重算时都会保留，只有纯自动生成的点会被刷新。
+- 时间轴右侧按钮换成「重新编排」与「清空」：前者按当前片段立刻重铺四通道（保留手打点），后者清空全部关键帧**并停下自动编排**（避免改代码又被塞回来），点「重新编排」即可恢复。
+- 自动编排停下后仍可照常手动打点、拖视角写入，改代码也不会丢。
+- 轨道圆点不再有只读/可点选的区分；拖动画布的统一规则（落点可见、只写拖动的轴、`Alt` 只预览）对全部轨道一致生效。
+- README 功能表、使用说明与英文说明同步；源码中已无「基础版 / 高级版」字样。
 
 ### 2026-09-19 · 视角设定逻辑梳理
 

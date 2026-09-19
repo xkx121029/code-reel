@@ -142,8 +142,6 @@ select:focus{border-color:var(--line-2)}
 .tl-head .note{margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tl-head .btn{flex:0 0 auto;padding:3px 10px;font-size:11px;border-radius:7px}
 .tl-head .btn[aria-pressed="true"]{color:var(--txt);border-color:var(--accent-dim);background:rgba(232,102,58,.08)}
-.tl-seg{flex:0 0 auto;width:128px;border-radius:7px}
-.tl-seg button{padding:3px 0;font-size:11px;letter-spacing:0}
 .tl-svg{display:block;width:100%;touch-action:none;cursor:crosshair}
 .tl-svg text{font-family:var(--mono);user-select:none;pointer-events:none}
 .tl-lab{font-size:9.5px;fill:var(--dim);letter-spacing:.06em}
@@ -154,12 +152,10 @@ select:focus{border-color:var(--line-2)}
 .tl-mid{stroke:var(--line-2);stroke-width:1;stroke-dasharray:2 3;opacity:.55}
 .tl-curve{fill:none;stroke:var(--accent);stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round}
 .tl-dot{fill:var(--panel);stroke:var(--accent);stroke-width:1.5;cursor:grab}
-.tl-dot.ro{cursor:default;stroke-width:1.2;opacity:.8}
 .tl-dot.on{fill:var(--accent)}
 .tl-dot.sel{fill:var(--accent);stroke:var(--txt);stroke-width:1.2}
 .tl-sel{stroke:var(--accent);stroke-width:1;stroke-dasharray:3 3;opacity:.75}
 .tl-snap{stroke:var(--txt);stroke-width:1;stroke-dasharray:1 3;opacity:.5}
-.tl-dot.pick{cursor:pointer}
 .tl-caret{stroke:var(--txt);stroke-width:1.1;opacity:.85}
 .tl-caretmark{fill:var(--txt);opacity:.85}
 .tl-tag{font-size:8.5px;fill:var(--dim)}
@@ -263,13 +259,10 @@ canvas.dragging{cursor:grabbing}
     <div class="timeline">
       <div class="tl-head">
         <h2>关 键 帧 时 间 轴</h2>
-        <div class="seg tl-seg" id="kfModeSeg">
-          <button data-kf="basic" aria-pressed="true" title="按出现方式与镜头运动自动打点">基础版</button>
-          <button data-kf="pro" aria-pressed="false" title="手动打点，可自由裁剪节奏">高级版</button>
-        </div>
         <span class="note" id="kfNote"></span>
         <button class="btn btn-ghost" id="btnSnap" aria-pressed="true" title="吸附到片段边界 / 播放头 / 刻度 / 其他关键帧；按住 Alt 临时关闭">吸附</button>
-        <button class="btn btn-ghost" id="btnKfAction">重新生成</button>
+        <button class="btn btn-ghost" id="btnKfAuto" title="按当前出现方式与镜头运动重新铺满四通道（自己碰过的点保留）">重新编排</button>
+        <button class="btn btn-ghost" id="btnKfClear" title="清空全部关键帧并停止自动编排，只走镜头运动预设">清空</button>
       </div>
       <svg class="tl-svg" id="tlSvg"></svg>
     </div>
@@ -1058,7 +1051,7 @@ const S = {
   autoCam: false,        // 自动运镜（3D 缓慢漂移）
   /* 关键帧：按通道分开，键为 { t: 全局时间轴秒数, v: 数值 }，t 升序 */
   kf: { speed: [], zoom: [], rotX: [], rotY: [] },
-  kfMode: 'basic',       // basic=自动编排 | pro=手动打点
+  auto: true,            // 自动编排是否生效（点「清空」会停下，点「重新编排」恢复）
   snap: true,            // 关键帧拖动/选点/定位是否吸附
   ratio: 16 / 9,
   empty: false,
@@ -1346,7 +1339,7 @@ function buildScene() {
     scene.clips = [];
     scene.total = 0;
     player.t = 0;
-    if (S.kfMode === 'basic') applyAuto();   /* 基础版没有片段就没有编排 */
+    if (S.auto) applyAuto();                 /* 没有片段就没有编排 */
     tl.dirty = true;
     updateStats(0, 0);
     return;
@@ -1474,8 +1467,8 @@ function buildScene() {
   scene.clips = clips;
   scene.total = acc;
   scene.ready = clips.length > 0;
-  /* 基础版：按当前片段重新编排（手动点保留）；高级版：保留手动数据，只把它收进片长内 */
-  if (S.kfMode === 'basic') applyAuto(); else clampKeys();
+  /* 开了自动编排就按当前片段重算（自己碰过的点保留），否则只把手动点收进片长内 */
+  if (S.auto) applyAuto(); else clampKeys();
   if (tl.sel && tl.sel.t > scene.total) tl.sel = null;   /* 选点随时间轴收短而失效 */
   tl.dirty = true;                   /* 片段边界与总长都变了，时间轴需重绘 */
 
@@ -1577,9 +1570,10 @@ function clampKeys() {
   for (const id in S.kf) for (const k of S.kf[id]) k.t = clamp(k.t, 0, T);
 }
 
-/* ---------------- 8.1b 基础版：自动编排 ----------------
-   基础版把「出现方式 × 镜头运动」直接翻译成四通道关键帧，用户不用打点；
-   高级版则是完全手动。两者共用同一套求值器，画面逻辑只有一套。
+/* ---------------- 8.1b 自动编排 ----------------
+   把「出现方式 × 镜头运动」直接翻译成四通道关键帧，作为随时可再生的默认编排；
+   在这之上轨道随时可手动编辑、拖动画布也能写入视角 —— 一套界面一套规则，
+   自己碰过的点会打上 man 标记，重算时不会被覆盖。
      · 速度：按各出现方式的打字手感在段内交替「冲刺—放缓」，段越长脉冲越多；
      · 缩放：段首 → 段末，相邻段首尾取值相接，段间插值即一次连续运镜；
      · 旋转：环绕 / 倾斜段从头扫到段末；整片都没有空间运动时该通道留空，
@@ -1891,11 +1885,10 @@ function drawTimeline() {
     P.push(`<line class="tl-mid" x1="${x0}" y1="${ym}" x2="${x1}" y2="${ym}"/>`);
     const pts = tlPoints(i);
     if (pts) P.push(`<polyline class="tl-curve" points="${pts}"/>`);
-    const ro = S.kfMode === 'pro' ? '' : ' ro pick';
     for (const k of S.kf[c.id]) {
       const on = tl.drag && tl.drag.k === k;
       const sl = tl.sel && tl.sel.k === k;
-      P.push(`<circle class="tl-dot${on ? ' on' : ''}${sl ? ' sel' : ''}${ro}" cx="${tlX(k.t).toFixed(1)}" cy="${tlY(i, k.v).toFixed(1)}" r="3.2"/>`);
+      P.push(`<circle class="tl-dot${on ? ' on' : ''}${sl ? ' sel' : ''}" cx="${tlX(k.t).toFixed(1)}" cy="${tlY(i, k.v).toFixed(1)}" r="3.2"/>`);
     }
   });
   P.push('</g>');
@@ -2010,19 +2003,17 @@ function bindTimeline() {
     const i = tlTrackAt(p.y);
     if (i < 0) return;
     const j = tlHitKey(i, p.x, p.y);
-    if (S.kfMode !== 'pro') {
-      /* 基础版：点已有的点就选中它，点空白就选这一刻（真正落点在拖完视角时写下） */
-      const ks = S.kf[CH[i].id];
-      let t = j >= 0 ? ks[j].t : clamp(tlT(p.x), 0, scene.total);
-      if (j < 0 && snapOn(e)) {
+    if (j < 0) {
+      /* 空白处按下 = 选一个时刻当落点（真正写入发生在拖完画面视角时） */
+      let t = clamp(tlT(p.x), 0, scene.total);
+      if (snapOn(e)) {
         const st = snapTimeAt(p.x, CH[i].id, true);
         if (st != null) t = clamp(st, 0, scene.total);
       }
-      selectAt(t, j >= 0 ? CH[i].id : null, j >= 0 ? ks[j] : null);
+      selectAt(t, null, null);
       e.preventDefault();
       return;
     }
-    if (j < 0) return;                    /* 空白处交给双击新增 */
     mode = 'key';
     tl.drag = { ch: CH[i].id, idx: j, k: S.kf[CH[i].id][j], st: false, sv: false };
     try { svg.setPointerCapture(e.pointerId); } catch (err) { }
@@ -2053,6 +2044,7 @@ function bindTimeline() {
     }
     k.t = t;
     k.v = CH[i].auto ? rotClamp(v) : v;      /* 旋转通道到 ±89° 为止，翻不到背面 */
+    k.man = true;                            /* 动过的点算你的，自动重算时不覆盖 */
     /* 越过邻居时交换次序：关键帧始终按时间升序，拖动不设硬性间隔 */
     const arr = S.kf[ch];
     arr.sort((a, b) => a.t - b.t);
@@ -2080,44 +2072,45 @@ function bindTimeline() {
     e.preventDefault();
     const ch = CH[i], arr = S.kf[ch.id];
     const j = tlHitKey(i, p.x, p.y);
-    if (S.kfMode !== 'pro') {
-      /* 基础版：双击已有的点删除它（拖视角写入的点也这样删） */
-      if (j < 0) return;
+    if (j >= 0) {
+      /* 命中点：删掉它 */
       const gone = arr[j];
       arr.splice(j, 1);
       if (tl.sel && tl.sel.k === gone) tl.sel = null;
-      tl.dirty = true;
       syncKfUI();
-      drawTimeline();
-      return;
-    }
-    if (j >= 0) {
-      arr.splice(j, 1);
     } else {
+      /* 空白处：新建一个点。手打的点打上 man，自动重算时不会被冲掉 */
       const t = clamp(tlT(p.x), 0, Math.max(0.05, scene.total));
       const v = tlVal(i, p.y);
-      if (!arr.some(k => Math.abs(k.t - t) < 0.02)) arr.push({ t, v: ch.auto ? rotClamp(v) : v });
+      if (!arr.some(k => Math.abs(k.t - t) < 0.02)) arr.push({ t, v: ch.auto ? rotClamp(v) : v, man: true });
       arr.sort((a, b) => a.t - b.t);
     }
+    tl.dirty = true;
     drawTimeline();
   });
 
-  /* 主按钮双语义：基础版 = 重新自动编排，高级版 = 清空手动关键帧 */
-  $("#btnKfAction").addEventListener("click", () => {
-    if (S.kfMode === 'pro') {
-      S.kf = { speed: [], zoom: [], rotX: [], rotY: [] };
-      tl.dirty = true;
-      drawTimeline();
-      toast('已清空关键帧');
-    } else {
-      applyAuto();
-      drawTimeline();
-      toast('已按当前片段重新编排');
-    }
+  /* 重新编排：按当前片段重铺四通道（自己碰过的点保留） */
+  $("#btnKfAuto").addEventListener("click", () => {
+    S.auto = true;
+    applyAuto();
+    syncKfUI();
+    drawTimeline();
+    toast('已按当前片段重新编排');
+  });
+
+  /* 清空：连自动编排一起停下，避免下次改代码又被塞回来 */
+  $("#btnKfClear").addEventListener("click", () => {
+    S.kf = { speed: [], zoom: [], rotX: [], rotY: [] };
+    S.auto = false;
+    tl.sel = null;
+    tl.dirty = true;
+    syncKfUI();
+    drawTimeline();
+    toast('已清空关键帧（点「重新编排」可再生成）');
   });
 }
 
-/* 基础版选点：顺带把播放头移到该时刻，做到「看到哪一刻就写到哪一刻」 */
+/* 选点：顺带把播放头移到该时刻，做到「看到哪一刻就写到哪一刻」 */
 function selectAt(t, ch, k) {
   tl.sel = { t, ch, k: k || null };
   if (scene.ready) {
@@ -2132,28 +2125,14 @@ function selectAt(t, ch, k) {
   toast(k ? '已选中该点 · 拖动画布视角即可覆盖' : '已选点 ' + t.toFixed(2) + 's · 拖动画布视角即可写入');
 }
 
-/* 模式切换：基础版 = 自动编排 + 拖视角写入 / 高级版 = 手动打点 */
+/* 提示文案：选点状态优先，其次是自动编排是否在跑 */
 function syncKfUI() {
-  const pro = S.kfMode === 'pro';
-  const seg = $("#kfModeSeg");
-  if (seg) [...seg.children].forEach(b => b.setAttribute('aria-pressed', b.dataset.kf === S.kfMode ? 'true' : 'false'));
   const sel = tl.sel;
   $("#kfNote").textContent = sel
     ? '已选点 ' + sel.t.toFixed(2) + 's · 拖动画布视角即写入旋转关键帧（Esc 取消）'
-    : (pro
-      ? '双击轨道加关键帧 · 拖动改时机与数值（自动吸附）· 双击关键帧删除 · 拖标尺定位'
-      : '四通道已自动编排；点轨道选点后拖动画布视角即可写入');
-  $("#btnKfAction").textContent = pro ? '清空关键帧' : '重新生成';
-}
-
-function setKfMode(m) {
-  if (S.kfMode === m) return;
-  S.kfMode = m;
-  /* 切到高级版保留当前这批关键帧作为起点，接着手动微调即可 */
-  if (m === 'basic') applyAuto(); else clampKeys();
-  syncKfUI();
-  tl.dirty = true;
-  drawTimeline();
+    : (S.auto
+      ? '自动编排已就绪 · 双击轨道加关键帧 · 拖动改时机与数值（自动吸附）· 拖动画布写入旋转'
+      : '自动编排已停止（点「重新编排」恢复）· 轨道仍可手动打点');
 }
 /* ---------------- 9. 相机与投影 ---------------- */
 /* 光标游标（连续）：单位游标取整后，在相邻两个单位位置之间线性插值。
@@ -3057,10 +3036,6 @@ function bindUI() {
     scheduleBuild(60);
   });
   $("#optAutoCam").addEventListener("change", e => { S.autoCam = e.target.checked; });
-  $("#kfModeSeg").addEventListener("click", e => {
-    const b = e.target.closest('button');
-    if (b && b.dataset.kf) setKfMode(b.dataset.kf);
-  });
   $("#btnSnap").addEventListener("click", () => {
     S.snap = !S.snap;
     $("#btnSnap").setAttribute("aria-pressed", S.snap ? "true" : "false");
