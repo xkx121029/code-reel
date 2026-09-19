@@ -41,6 +41,8 @@
   - **只写真正拖动的方向**：横拖只写水平旋转、纵拖只写垂直旋转（阈值 2px ≈ 0.6°），不会顺手把另一条轴也钉住。
   - **按住 `Alt` 拖动只预览**：不暂停、不落点、不写数据，临时视角留着，双击画面或「复位视角」即可清掉。
   - **拖动可在 ±89° 内自由转，不会翻到平面背面**（正好 90° 会让画面塌成一条线，所以留 1° 余量）。整片此前没有旋转关键帧的话，会先按段采样一次原运镜基线，避免一个点把整片角度都带跑。
+  - **曲线上一键插点**：直接点在曲线上（±8px）就在那一刻插一个关键帧，取值就是曲线当前值 —— 形状不会跳，插完可以继续拖或删。点空白仍是「选点」（决定拖视角写到哪一刻）。
+  - **右栏数据面板**：选中哪个关键帧，面板就切到对应通道并填入精确的时刻与数值，可直接手输改（越界自动夹取，旋转通道夹到 ±89°）；还能「上一帧 / 下一帧」逐点跳转、在播放头处「新建点」、「删除点」。
   - **轨道随时可编辑**：双击轨道空白加关键帧、拖动同时改时机与数值（跟浮动数值气泡）、双击关键帧删除、点空白选点、拖标尺定位。没有模式开关 —— 自动编排只是「随时可再生的默认值」，想从头自己摆就点「清空」（同时会停下自动编排，避免改代码又被塞回来），想要回默认就点「重新编排」。
   - **吸附**：拖动关键帧、点轨道选点、拖标尺都会自动贴到有意义的位置 —— 时间贴片段起点 / 打字结束 / 片段结束、播放头、时间刻度、其他通道的关键帧；数值贴通道基准值（1× / 1× / 0°）与同通道其他关键帧的值。阈值 7px、已吸住后放宽到 12px（不会在边缘抖），吸附时有参考线提示，点「吸附」按钮或按住 `Alt` 可关闭。
   - 速度轨道是全局时间轴曲线，但在每段打字区间内按面积归一化：变速只重新分配快慢，不会让哪段代码写不完。
@@ -77,8 +79,9 @@ git clone https://gitee.com/xkx1029/code-reel.git
   - 快捷键：`空格` 播放 / 暂停，`R` 重播。
   - 时间轴四条轨道自上而下为速度 / 缩放 / 水平旋转 / 垂直旋转；时间轴坐标与播放条共用同一个播放位置。
   - 时间轴右侧是「吸附」「重新编排」「清空」三个按钮 —— 没有模式切换，四通道随时可编辑。
-  - 点轨道空白即选中一个时刻（播放头同步过去，`Esc` 取消），随后在画面上拖动视角就会把角度写到那一刻；双击空白加关键帧、双击已有点删除。
+  - 点轨道空白即选中一个时刻（播放头同步过去，`Esc` 取消），随后在画面上拖动视角就会把角度写到那一刻；**点在曲线上直接插点**、双击空白加关键帧、双击已有点删除、拖动关键帧改时机与数值。
 - **右栏 · 参数**：
+  - 关键帧数据面板：通道下拉 + 时刻 / 数值输入框 + 上一帧 / 下一帧 / 新建点 / 删除点，与时间轴的选中状态双向联动
   - 出现方式与镜头运动（各自可多选，组合成播放序列）
   - 主题、画幅比例、字号、速度
   - 行号、窗口边框、投影开关
@@ -130,7 +133,7 @@ code_video/
 - 19 languages supported, plus plain text.
 - **Templates**: one click in the left column applies a whole look + animation setup **plus its own speed curve** (Cinematic / Punchy / Lecture / Vertical / Telegram / Glitch / Timelapse / Calm), ready to play. The curve is defined per clip's typing progress, so the same rhythm replays in every segment and no segment can outrun its own typing window. Templates never overwrite code you already wrote — a matching sample is loaded only when the editor is empty. "Empty template" resets code, arrangement and parameters.
 - Two independent dimensions combined into one playback sequence: reveal style (typewriter / word / line / syntax block) × camera move (still / push in / pull out / orbit / tilt).
-- A keyframe timeline under the stage with four channels: speed (0.25–3× time remapping), zoom (0.6–1.6×), yaw and pitch (free within ±89°, so the plane never flips to its back side — the track range expands automatically to fit the data). One single mode: auto-arrangement writes a full default set from the current reveal × camera move selections and is recomputed whenever the code or selection changes, while the tracks stay editable the whole time (double-click to add, drag to retime/revalue, double-click to delete, drag the ruler to scrub). Anything you touch is flagged and survives recomputation; "Clear" empties the tracks and pauses the auto-arrangement, "Re-arrange" brings it back.
+- A keyframe timeline under the stage with four channels: speed (0.25–3× time remapping), zoom (0.6–1.6×), yaw and pitch (free within ±89°, so the plane never flips to its back side — the track range expands automatically to fit the data). One single mode: auto-arrangement writes a full default set from the current reveal × camera move selections and is recomputed whenever the code or selection changes, while the tracks stay editable the whole time (double-click to add, drag to retime/revalue, double-click to delete, drag the ruler to scrub). Anything you touch is flagged and survives recomputation; "Clear" empties the tracks and pauses the auto-arrangement, "Re-arrange" brings it back. **Clicking directly on a curve** inserts a keyframe there (value = the curve's current value, so the shape does not jump), and the **keyframe data panel** in the right column shows the selected keyframe's exact time and value with editable number inputs, plus prev/next keyframe hopping, new and delete.
 - **Drag the canvas to write keyframes**: press to lock the target moment (a picked point if you have one, otherwise the current time) — the marker appears and playback pauses, so the target, the frame you see and the angle written all agree. Release to bake the angle into the yaw/pitch keyframes, only for the axes you actually dragged; the temporary view resets and the picture does not jump. Hold `Alt` while dragging to preview without writing anything.
 - **Snapping** (on by default, toggle in the timeline header, `Alt` to bypass): times snap to clip start / typing end / clip end, the playhead, ruler ticks and keyframes of the other channels; values snap to the channel baseline (1× / 1× / 0°) and to other keyframes of the same channel. 7px engage radius, 12px release radius, with guide lines while snapped.
 - Crisp text at any rotation: code is drawn at device-pixel scale on an offscreen canvas and perspective-mapped by WebGL (no slice seams), with a 2D fast path for unrotated 1:1 shots.
@@ -142,6 +145,13 @@ Just open `index.html` in a modern browser. Licensed under the MIT License.
 ---
 
 ## 更新日志
+
+### 2026-09-19 · 曲线上点一下即插点 + 右栏关键帧数据面板
+
+- 时间轴：**直接点在曲线上**（垂直距离 ≤ 8px）就在那一刻插一个关键帧，取值即曲线当前值，所以形状不跳；插完自动选中、播放头跟过去。点空白仍是「选点」（决定拖视角的落点），两条路互不干扰；还没有曲线的通道不会凭空建点。
+- 右栏新增「关键帧数据」面板：通道下拉（自动跟随选中的点）+ 时刻 / 数值输入框（带各通道的值域与步进，越界夹取、旋转夹到 ±89°），输入即时生效；另有「上一帧 / 下一帧」（在同一通道内逐点跳转）「新建点」（在输入的时刻处建点）「删除点」。
+- 面板与时间轴双向联动：在时间轴点、拖、建点都会同步到面板；在面板改数值会立刻反映到曲线与画面。播放条拖动且未选中时，面板显示播放头处的时刻与曲线值作为参考。
+- 时间轴拖动关键帧时会实时把选中态与数值同步给面板。
 
 ### 2026-09-19 · 模版加到八个，并自带变速曲线
 
