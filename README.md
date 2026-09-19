@@ -20,8 +20,7 @@
   | 逐词 | 按语法片段输出 | 推近 | 缓推 |
   | 逐行 | 整行升起 | 拉远 | 缓收 |
   | 语法块 | 按语法块出现 | 环绕 | 空间旋转 |
-  | 扫描擦除 | 横向擦开 | 倾斜 | 斜切入正 |
-  | 聚焦 | 由虚到实 | | |
+  | | | 倾斜 | 斜切入正 |
 - **关键帧时间轴**：舞台下方是四通道关键帧编辑器 —— 速度（0.25~3×）、缩放（0.6~1.6×）、水平旋转与垂直旋转（**不设角度上限**，轨道显示范围会随数据自动外扩）。顶部片段条标出每段的「出现方式 · 镜头运动」。
   - **基础版（自动编排）**：一键把当前「出现方式 × 镜头运动」翻译成整套关键帧 —— 速度按各出现方式的打字手感在段内交替「冲刺—放缓」（段越长脉冲越多，段尾收住），缩放按运动语义从段首走到段末（推近就一直推、段与段首尾相接成一次连贯运镜），环绕 / 倾斜段从头扫到段末（倾斜保持「开头即斜、随后归正」）。改代码或改选择即重算，不用手动打点。
   - **拖动画布视角即写入**：把画面拖到满意的角度松手，这段角度就固化成旋转关键帧（同时写入水平与垂直旋转），临时视角随之清零，画面不会有任何跳变。**拖动不设角度上限**，可以一路转到任意角度（包括转过头看背面）。点轨道上的点或空白先选一个时刻，就写到那一刻；基础版没选点时自动落在当前时刻。整片此前没有旋转关键帧的话，会先按段采样一次原运镜基线，避免一个点把整片角度都带跑。
@@ -111,7 +110,7 @@ code_video/
 
 - Paste code → automatic language detection → syntax highlighting, powered by a small hand-written lexer (no highlight.js / no CDN).
 - 19 languages supported, plus plain text.
-- Two independent dimensions combined into one playback sequence: reveal style (typewriter / word / line / syntax block / scan wipe / focus) × camera move (still / push in / pull out / orbit / tilt).
+- Two independent dimensions combined into one playback sequence: reveal style (typewriter / word / line / syntax block) × camera move (still / push in / pull out / orbit / tilt).
 - A keyframe timeline under the stage with four channels: speed (0.25–3× time remapping), zoom (0.6–1.6×), yaw and pitch (no angle limit — the track range expands automatically to fit the data). Two modes: **Basic** auto-writes the whole arrangement from the current reveal × camera move selections (recomputed whenever the code or selection changes), **Pro** lets you double-click a track to add a keyframe, drag to retime or revalue it, double-click a keyframe to delete, and drag the ruler to scrub. Switching Basic → Pro keeps the generated keyframes as a starting point.
 - **Drag the canvas to write keyframes**: release the mouse and the angle you dragged to is baked into the yaw/pitch keyframes, the temporary view resets, and the picture does not jump. Click a keyframe or empty track first to choose the moment it is written to.
 - **Snapping** (on by default, toggle in the timeline header, `Alt` to bypass): times snap to clip start / typing end / clip end, the playhead, ruler ticks and keyframes of the other channels; values snap to the channel baseline (1× / 1× / 0°) and to other keyframes of the same channel. 7px engage radius, 12px release radius, with guide lines while snapped.
@@ -124,6 +123,11 @@ Just open `index.html` in a modern browser. Licensed under the MIT License.
 ---
 
 ## 更新日志
+
+### 2026-09-19 · 删掉扫描擦除与聚焦
+
+- 出现方式收敛为四种：打字机、逐词、逐行、语法块（与镜头运动组合出 20 种片段）。
+- 移除对应的绘制分支（横向裁剪擦除、模糊聚焦）与自动编排里这两档的速度骨架；每行「还没开始就跳过」的早退逻辑保留。
 
 ### 2026-09-19 · 视角角度不再受限
 

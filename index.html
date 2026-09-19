@@ -1031,8 +1031,6 @@ const REVEAL = [
   { id: 'word', label: '逐词', hint: '按语法片段', gran: 'token', rate: 24, tail: 1.0 },
   { id: 'line', label: '逐行', hint: '整行升起', gran: 'line', rate: 7.5, tail: 0.8 },
   { id: 'block', label: '语法块', hint: '按块出现', gran: 'block', rate: 2.4, tail: 1.1 },
-  { id: 'scan', label: '扫描擦除', hint: '横向擦开', gran: 'line', rate: 3.2, tail: 0.9, fx: 'scan' },
-  { id: 'focus', label: '聚焦', hint: '由虚到实', gran: 'line', rate: 3.0, tail: 1.0, fx: 'focus' },
 ];
 
 const MOVE = [
@@ -1571,8 +1569,6 @@ const AUTO_SPEED = {
   word:  { a: 0.90, b: 1.22, g: 0.95, c: 0.84 },
   line:  { a: 0.93, b: 1.14, g: 0.97, c: 0.88 },
   block: { a: 0.91, b: 1.18, g: 0.96, c: 0.86 },
-  scan:  { a: 0.94, b: 1.12, g: 0.97, c: 0.90 },
-  focus: { a: 0.93, b: 1.10, g: 0.97, c: 0.91 },
 };
 /* 运镜缩放：段首 → 段末（0.85D）。相邻段首尾刻意取值相接，
    例如 推近[1.00→1.10] 接 拉远[1.10→1.00]，段间插值即为一次连续运镜。 */
@@ -2673,7 +2669,6 @@ function drawPlane(clip, te, u, tAbs) {
 
   /* 代码：按出现方式绘制 */
   const gran = clip.reveal.gran;
-  const fx = clip.reveal.fx || '';
   const baseX = pad + gutterW;
   const typeDone = te >= clip.typeDur;
 
@@ -2684,50 +2679,10 @@ function drawPlane(clip, te, u, tAbs) {
     if (!xs) continue;
     const y = Math.round(pad + titleH + li * lineH + lineH * 0.8);
 
-    /* 行级进度（行/块粒度下行内一致），用于扫描与聚焦 */
-    let lineFrac = 1;
+    /* 整行还没开始就跳过（行 / 块粒度下，行内进度一致） */
     const firstTk = toks.length ? toks[0] : null;
     const firstR = firstTk ? clip.gd.ranges.get(firstTk) : null;
-    if (firstR) lineFrac = clamp((u - firstR[0]) / Math.max(1e-6, firstR[1] - firstR[0]), 0, 1);
-    if (lineFrac <= 0) continue;
-
-    if (fx === 'scan') {
-      /* 横向擦除：按行裁剪已擦开部分，前沿带一条亮条 */
-      const w = Math.max(1, xs[xs.length - 1]);
-      g.save();
-      g.beginPath();
-      g.rect(baseX - 2, y - lineH * 0.62, w * lineFrac + 2, lineH * 1.24);
-      g.clip();
-      for (const tk of toks) {
-        const r = clip.gd.ranges.get(tk);
-        if (!r || u <= r[0]) continue;
-        g.fillStyle = th[tk.type] || th.text;
-        for (let k = 0; k < tk.cps.length; k++) g.fillText(tk.cps[k], baseX + xs[tk.colStart + k], y);
-      }
-      g.restore();
-      if (lineFrac < 0.999) {
-        g.globalAlpha = 0.9;
-        g.fillStyle = th.caret;
-        g.fillRect(baseX + w * lineFrac - 1, y - lineH * 0.44, Math.max(2, fontPx * 0.1), lineH * 0.88);
-        g.globalAlpha = 1;
-      }
-      continue;
-    }
-
-    if (fx === 'focus') {
-      /* 聚焦：由虚到实 */
-      if (FILTER_OK) g.filter = 'blur(' + ((1 - lineFrac) * fontPx * 0.16).toFixed(1) + 'px)';
-      g.globalAlpha = lineFrac;
-      for (const tk of toks) {
-        const r = clip.gd.ranges.get(tk);
-        if (!r || u <= r[0]) continue;
-        g.fillStyle = th[tk.type] || th.text;
-        for (let k = 0; k < tk.cps.length; k++) g.fillText(tk.cps[k], baseX + xs[tk.colStart + k], y);
-      }
-      if (FILTER_OK) g.filter = 'none';
-      g.globalAlpha = 1;
-      continue;
-    }
+    if (firstR && u <= firstR[0]) continue;
 
     if (gran === 'char') {
       /* 逐字符：只做快速淡入，不做位移（每秒数十次的上浮会显得一直在抖） */
