@@ -2580,12 +2580,21 @@ function boxBlur(a, r) {
 }
 
 /* 路径以「平面单位」存放：横向是镜头偏移（钉在左起 1/3，再收在安全区内），
-   纵向是光标相对平面中心的偏移（收在上下安全区内） */
+   纵向是光标相对平面中心的偏移（收在上下安全区内）。
+   安全区按本段可能出现的最小缩放来算，这样后面乘上任意缩放都不会越界，
+   也就不需要在求值时再钳一次（在平滑之后钳会留下速度折角）。 */
 function buildFollowPath(clip) {
   const n = Math.max(2, Math.round(clip.typeDur / FP_STEP) + 1);
   const ref = scene.baseScale;
-  const anchor = view.w / (6 * ref);                          /* 左起 1/3，换算到平面单位 */
-  const lim = Math.max(0, scene.planeW / 2 - view.w / (2 * ref));   /* 镜头行程：平面始终铺满视口 */
+  /* 本段缩放最小值：关键帧通道是折线，极值只可能在段首段尾或关键帧上 */
+  let zmin = kfValue('zoom', clip.t0, 1);
+  const zmax = kfValue('zoom', clip.t0 + clip.typeDur, 1);
+  for (const k of S.kf.zoom) {
+    if (k.t >= clip.t0 && k.t <= clip.t0 + clip.typeDur) zmin = Math.min(zmin, k.v);
+  }
+  zmin = Math.max(0.15, Math.min(zmin, zmax));
+  const anchor = view.w / (6 * ref);                                       /* 左起 1/3，换算到平面单位 */
+  const lim = Math.max(0, scene.planeW / 2 - view.w / (2 * ref * zmin));   /* 镜头行程：平面始终铺满视口 */
   const ms = scene.maxScroll;
   const X = new Float64Array(n), Y = new Float64Array(n);
   for (let i = 0; i < n; i++) {
@@ -2594,17 +2603,17 @@ function buildFollowPath(clip) {
     Y[i] = clamp(p.y, -ms, ms);
   }
   const r = Math.max(1, Math.round(FP_WIN / (2 * FP_STEP)));
-  return { key: fpKey(), ref, x: boxBlur(boxBlur(X, r), r), y: boxBlur(boxBlur(Y, r), r) };
+  return { key: fpKey(), x: boxBlur(boxBlur(X, r), r), y: boxBlur(boxBlur(Y, r), r) };
 }
 
 function followCam(clip, te) {
   const key = fpKey();
   if (!clip.fp || clip.fp.key !== key) clip.fp = buildFollowPath(clip);
   const fp = clip.fp, n = fp.x.length;
-  if (n < 2) return { x: 0, y: 0, ref: scene.baseScale };
+  if (n < 2) return { x: 0, y: 0 };
   const g = clamp(te / FP_STEP, 0, n - 1), i0 = Math.floor(g);
   const i1 = Math.min(i0 + 1, n - 1), f = g - i0;
-  return { x: lerp(fp.x[i0], fp.x[i1], f), y: lerp(fp.y[i0], fp.y[i1], f), ref: fp.ref };
+  return { x: lerp(fp.x[i0], fp.x[i1], f), y: lerp(fp.y[i0], fp.y[i1], f) };
 }
 
 function cameraFor(clip, te, tAbs) {
@@ -2657,19 +2666,13 @@ function cameraFor(clip, te, tAbs) {
   if (S.kf.rotX.length) rotX = kfValue('rotX', tAbs, 0) * DEG;
 
   /* 跟随：光标横向钉在左起 1/3、纵向居中；轨迹已由 followCam 连续化平滑，
-     这里只做「钉住 + 安全区」（安全区已在建路径时收好，这里是缩放后的兜底）。
+     安全区也在建路径时按最小缩放收好了，这里只需乘上当前缩放。
      两步都是时间的纯函数，因此拖动进度条 / 导出视频与实时播放完全一致 */
   let x = 0, y = 0;
   if (S.follow) {
     const fp = followCam(clip, te);
-    const k = scale / fp.ref;                    /* 关键帧缩放：整条跟随轨道等比缩放 */
-    if (scene.scrollX) {
-      const lim = Math.max(0, scene.planeW * scale / 2 - view.w / 2);   /* 平面仍要铺满视口 */
-      x = clamp(fp.x * k, -lim, lim) * (1 - settle);
-    }
-    if (scene.scroll) {
-      y = -fp.y * scale * (1 - settle) * (mode === 'orbit' ? 0.6 : 1);
-    }
+    if (scene.scrollX) x = fp.x * scale * (1 - settle);
+    if (scene.scroll) y = -fp.y * scale * (1 - settle) * (mode === 'orbit' ? 0.6 : 1);
   }
 
   return { rotX, rotY, rotZ, scale, x, y, z, persp: ds * 1500 };
