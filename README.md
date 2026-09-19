@@ -22,9 +22,9 @@
   | 语法块 | 按语法块出现 | 环绕 | 空间旋转 |
   | 扫描擦除 | 横向擦开 | 倾斜 | 斜切入正 |
   | 聚焦 | 由虚到实 | | |
-- **关键帧时间轴**：舞台下方是四通道关键帧编辑器 —— 速度（0.25~3×）、缩放（0.6~1.6×）、水平旋转与垂直旋转（±40°）。顶部片段条标出每段的「出现方式 · 镜头运动」。
+- **关键帧时间轴**：舞台下方是四通道关键帧编辑器 —— 速度（0.25~3×）、缩放（0.6~1.6×）、水平旋转与垂直旋转（**不设角度上限**，轨道显示范围会随数据自动外扩）。顶部片段条标出每段的「出现方式 · 镜头运动」。
   - **基础版（自动编排）**：一键把当前「出现方式 × 镜头运动」翻译成整套关键帧 —— 速度按各出现方式的打字手感在段内交替「冲刺—放缓」（段越长脉冲越多，段尾收住），缩放按运动语义从段首走到段末（推近就一直推、段与段首尾相接成一次连贯运镜），环绕 / 倾斜段从头扫到段末（倾斜保持「开头即斜、随后归正」）。改代码或改选择即重算，不用手动打点。
-  - **拖动画布视角即写入**：把画面拖到满意的角度松手，这段角度就固化成旋转关键帧（同时写入水平与垂直旋转），临时视角随之清零，画面不会有任何跳变。点轨道上的点或空白先选一个时刻，就写到那一刻；基础版没选点时自动落在当前时刻。整片此前没有旋转关键帧的话，会先按段采样一次原运镜基线，避免一个点把整片角度都带跑。
+  - **拖动画布视角即写入**：把画面拖到满意的角度松手，这段角度就固化成旋转关键帧（同时写入水平与垂直旋转），临时视角随之清零，画面不会有任何跳变。**拖动不设角度上限**，可以一路转到任意角度（包括转过头看背面）。点轨道上的点或空白先选一个时刻，就写到那一刻；基础版没选点时自动落在当前时刻。整片此前没有旋转关键帧的话，会先按段采样一次原运镜基线，避免一个点把整片角度都带跑。
   - **高级版（手动打点）**：双击轨道空白加关键帧、拖动同时改时机与数值（跟浮动数值气泡）、双击关键帧删除、拖标尺定位；从基础版切换过去会保留那批自动关键帧作为起点。手动点（含拖视角写入的）在基础版重算时会被保留，不会被自动编排覆盖。
   - **吸附**：拖动关键帧、点轨道选点、拖标尺都会自动贴到有意义的位置 —— 时间贴片段起点 / 打字结束 / 片段结束、播放头、时间刻度、其他通道的关键帧；数值贴通道基准值（1× / 1× / 0°）与同通道其他关键帧的值。阈值 7px、已吸住后放宽到 12px（不会在边缘抖），吸附时有参考线提示，点「吸附」按钮或按住 `Alt` 可关闭。
   - 速度轨道是全局时间轴曲线，但在每段打字区间内按面积归一化：变速只重新分配快慢，不会让哪段代码写不完。
@@ -112,7 +112,7 @@ code_video/
 - Paste code → automatic language detection → syntax highlighting, powered by a small hand-written lexer (no highlight.js / no CDN).
 - 19 languages supported, plus plain text.
 - Two independent dimensions combined into one playback sequence: reveal style (typewriter / word / line / syntax block / scan wipe / focus) × camera move (still / push in / pull out / orbit / tilt).
-- A keyframe timeline under the stage with four channels: speed (0.25–3× time remapping), zoom (0.6–1.6×), yaw and pitch (±40°). Two modes: **Basic** auto-writes the whole arrangement from the current reveal × camera move selections (recomputed whenever the code or selection changes), **Pro** lets you double-click a track to add a keyframe, drag to retime or revalue it, double-click a keyframe to delete, and drag the ruler to scrub. Switching Basic → Pro keeps the generated keyframes as a starting point.
+- A keyframe timeline under the stage with four channels: speed (0.25–3× time remapping), zoom (0.6–1.6×), yaw and pitch (no angle limit — the track range expands automatically to fit the data). Two modes: **Basic** auto-writes the whole arrangement from the current reveal × camera move selections (recomputed whenever the code or selection changes), **Pro** lets you double-click a track to add a keyframe, drag to retime or revalue it, double-click a keyframe to delete, and drag the ruler to scrub. Switching Basic → Pro keeps the generated keyframes as a starting point.
 - **Drag the canvas to write keyframes**: release the mouse and the angle you dragged to is baked into the yaw/pitch keyframes, the temporary view resets, and the picture does not jump. Click a keyframe or empty track first to choose the moment it is written to.
 - **Snapping** (on by default, toggle in the timeline header, `Alt` to bypass): times snap to clip start / typing end / clip end, the playhead, ruler ticks and keyframes of the other channels; values snap to the channel baseline (1× / 1× / 0°) and to other keyframes of the same channel. 7px engage radius, 12px release radius, with guide lines while snapped.
 - Crisp text at any rotation: code is drawn at device-pixel scale on an offscreen canvas and perspective-mapped by WebGL (no slice seams), with a 2D fast path for unrotated 1:1 shots.
@@ -124,6 +124,14 @@ Just open `index.html` in a modern browser. Licensed under the MIT License.
 ---
 
 ## 更新日志
+
+### 2026-09-19 · 视角角度不再受限
+
+- 移除画布拖动的角度上限：`rotX / rotY` 都不再夹取，可以一路转到任意角度（过头会看到平面背面），只有滚轮调距离仍受限（距离不能穿过相机）。
+- 移除打点时的 ±40° 截断：拖出来的角度原样写进关键帧，不再出现"拖到一半被卡住、松手画面跳一下"。
+- 旋转轨道显示范围改为**随数据自动外扩**（基准 ±40°，出现更大角度时按 10° 一档扩到刚好包住 + 余量），所以超大角度依然看得见、曲线照常绘制。
+- 轨道拖动不再夹取：指针拖到轨道外会继续取值，配合自动外扩的范围可以一路拖到大角度。
+- 拖动期间冻结轨道范围，避免指针位置与数值的对应关系在拖动中跳变。
 
 ### 2026-09-19 · 关键帧吸附
 
