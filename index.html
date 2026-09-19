@@ -2555,8 +2555,7 @@ function caretPlanePt(clip, t) {
         拖动进度条 / 导出视频与实时播放完全一致。
    路径只依赖片段排期与速度通道，速度关键帧一变就按 key 重建。 */
 const FP_STEP = 1 / 120;      /* 采样网格 */
-const FP_WIN = 0.5;           /* 三角核半宽（秒）：越大越稳、越小越贴光标 */
-const FP_BIAS = 0.25;         /* 前瞻量（秒）：整段未来已知，提前为换行后的落点让位 */
+const FP_WIN = 0.4;           /* 三角核半宽（秒）：越大越稳、越小越贴光标 */
 
 function fpKey() {
   const ks = S.kf.speed;
@@ -2585,21 +2584,23 @@ function boxBlur(a, r) {
    安全区按本段可能出现的最小缩放来算，这样后面乘上任意缩放都不会越界，
    也就不需要在求值时再钳一次（在平滑之后钳会留下速度折角）。 */
 function buildFollowPath(clip) {
-  const n = Math.max(2, Math.round(clip.typeDur / FP_STEP) + 1);
+  const T = clip.typeDur;
+  /* 网格要越过打字结束点一个核宽：否则平滑的尾巴被切掉，镜头会在打完字的瞬间停死 */
+  const n = Math.max(2, Math.round((T + 2 * FP_WIN) / FP_STEP) + 1);
   const ref = scene.baseScale;
   /* 本段缩放最小值：关键帧通道是折线，极值只可能在段首段尾或关键帧上 */
   let zmin = kfValue('zoom', clip.t0, 1);
-  const zmax = kfValue('zoom', clip.t0 + clip.typeDur, 1);
+  const zmax = kfValue('zoom', clip.t0 + T, 1);
   for (const k of S.kf.zoom) {
-    if (k.t >= clip.t0 && k.t <= clip.t0 + clip.typeDur) zmin = Math.min(zmin, k.v);
+    if (k.t >= clip.t0 && k.t <= clip.t0 + T) zmin = Math.min(zmin, k.v);
   }
   zmin = Math.max(0.15, Math.min(zmin, zmax));
-  const anchor = view.w / (6 * ref);                                       /* 左起 1/3，换算到平面单位 */
-  const lim = Math.max(0, scene.planeW / 2 - view.w / (2 * ref * zmin));   /* 镜头行程：平面始终铺满视口 */
+  const anchor = view.w / (6 * ref);                                     /* 左起 1/3，换算到平面单位 */
+  const lim = Math.max(0, scene.planeW / 2 - view.w / (2 * ref * zmin)); /* 镜头行程：平面始终铺满视口 */
   const ms = scene.maxScroll;
   const X = new Float64Array(n), Y = new Float64Array(n);
   for (let i = 0; i < n; i++) {
-    const p = caretPlanePt(clip, clamp(i * FP_STEP + FP_BIAS, 0, clip.typeDur));
+    const p = caretPlanePt(clip, clamp(i * FP_STEP, 0, T));    /* 打字结束后光标停住，继续沿用末位置 */
     X[i] = clamp(-anchor - p.x, -lim, lim);
     Y[i] = clamp(p.y, -ms, ms);
   }
