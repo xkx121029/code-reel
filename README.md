@@ -22,9 +22,10 @@
   | 语法块 | 按语法块出现 | 环绕 | 空间旋转 |
   | 扫描擦除 | 横向擦开 | 倾斜 | 斜切入正 |
   | 聚焦 | 由虚到实 | | |
-- **关键帧时间轴**：舞台下方是四通道关键帧编辑器 —— 速度（0.25~3×）、缩放（0.6~1.6×）、水平旋转与垂直旋转（±25°）。顶部片段条标出每段的「出现方式 · 镜头运动」。
-  - **基础版（自动编排）**：一键把当前「出现方式 × 镜头运动」翻译成整套关键帧 —— 速度按各出现方式的打字手感在段内交替「冲刺—放缓」（段越长脉冲越多，段尾收住），缩放按运动语义从段首走到段末（推近就一直推、段与段首尾相接成一次连贯运镜），环绕 / 倾斜段从头扫到段末（倾斜保持「开头即斜、随后归正」）。改代码或改选择即重算，轨道只读，不用手动打点。
-  - **高级版（手动打点）**：双击轨道空白加关键帧、拖动同时改时机与数值（跟浮动数值气泡）、双击关键帧删除、拖标尺定位；从基础版切换过去会保留那批自动关键帧作为起点。
+- **关键帧时间轴**：舞台下方是四通道关键帧编辑器 —— 速度（0.25~3×）、缩放（0.6~1.6×）、水平旋转与垂直旋转（±40°）。顶部片段条标出每段的「出现方式 · 镜头运动」。
+  - **基础版（自动编排）**：一键把当前「出现方式 × 镜头运动」翻译成整套关键帧 —— 速度按各出现方式的打字手感在段内交替「冲刺—放缓」（段越长脉冲越多，段尾收住），缩放按运动语义从段首走到段末（推近就一直推、段与段首尾相接成一次连贯运镜），环绕 / 倾斜段从头扫到段末（倾斜保持「开头即斜、随后归正」）。改代码或改选择即重算，不用手动打点。
+  - **拖动画布视角即写入**：把画面拖到满意的角度松手，这段角度就固化成旋转关键帧（同时写入水平与垂直旋转），临时视角随之清零，画面不会有任何跳变。点轨道上的点或空白先选一个时刻，就写到那一刻；基础版没选点时自动落在当前时刻。整片此前没有旋转关键帧的话，会先按段采样一次原运镜基线，避免一个点把整片角度都带跑。
+  - **高级版（手动打点）**：双击轨道空白加关键帧、拖动同时改时机与数值（跟浮动数值气泡）、双击关键帧删除、拖标尺定位；从基础版切换过去会保留那批自动关键帧作为起点。手动点（含拖视角写入的）在基础版重算时会被保留，不会被自动编排覆盖。
   - 速度轨道是全局时间轴曲线，但在每段打字区间内按面积归一化：变速只重新分配快慢，不会让哪段代码写不完。
   - 缩放与旋转通道有关键帧时接管相机，没有关键帧的通道继续走镜头运动预设。
 - **清晰渲染**：离屏 Canvas 按设备像素 1:1 绘制代码，再交给 WebGL 做真透视贴图（透视插值由硬件保证，旋转时无拼接接缝）；无旋转且 1:1 时走单次 2D 贴图快路径，像素级锐利。搭配 3D 网格背景与投影轮廓模糊填充的阴影。
@@ -57,7 +58,8 @@ git clone https://gitee.com/xkx1029/code-reel.git
 - **中栏 · 预览舞台**：展示动画画面，下方是关键帧时间轴与播放条（播放 / 暂停、重播、可拖拽的进度条）。
   - 快捷键：`空格` 播放 / 暂停，`R` 重播。
   - 时间轴四条轨道自上而下为速度 / 缩放 / 水平旋转 / 垂直旋转；时间轴坐标与播放条共用同一个播放位置。
-  - 时间轴左上角可在 **基础版**（自动编排，只读）与 **高级版**（手动打点）之间切换；右侧按钮分别是「重新生成」与「清空关键帧」。
+  - 时间轴左上角可在 **基础版**（自动编排）与 **高级版**（手动打点）之间切换；右侧按钮分别是「重新生成」与「清空关键帧」。
+  - 基础版下点轨道上的点或空白即选中一个时刻（播放头同步过去，`Esc` 取消），随后在画面上拖动视角就会把角度写到那一刻；双击已有点可删除。
 - **右栏 · 参数**：
   - 出现方式与镜头运动（各自可多选，组合成播放序列）
   - 主题、画幅比例、字号、速度
@@ -109,7 +111,8 @@ code_video/
 - Paste code → automatic language detection → syntax highlighting, powered by a small hand-written lexer (no highlight.js / no CDN).
 - 19 languages supported, plus plain text.
 - Two independent dimensions combined into one playback sequence: reveal style (typewriter / word / line / syntax block / scan wipe / focus) × camera move (still / push in / pull out / orbit / tilt).
-- A keyframe timeline under the stage with four channels: speed (0.25–3× time remapping), zoom (0.6–1.6×), yaw and pitch (±25°). Two modes: **Basic** auto-writes the whole arrangement from the current reveal × camera move selections (read-only, recomputed whenever the code or selection changes), **Pro** lets you double-click a track to add a keyframe, drag to retime or revalue it, double-click a keyframe to delete, and drag the ruler to scrub. Switching Basic → Pro keeps the generated keyframes as a starting point.
+- A keyframe timeline under the stage with four channels: speed (0.25–3× time remapping), zoom (0.6–1.6×), yaw and pitch (±40°). Two modes: **Basic** auto-writes the whole arrangement from the current reveal × camera move selections (recomputed whenever the code or selection changes), **Pro** lets you double-click a track to add a keyframe, drag to retime or revalue it, double-click a keyframe to delete, and drag the ruler to scrub. Switching Basic → Pro keeps the generated keyframes as a starting point.
+- **Drag the canvas to write keyframes**: release the mouse and the angle you dragged to is baked into the yaw/pitch keyframes, the temporary view resets, and the picture does not jump. Click a keyframe or empty track first to choose the moment it is written to.
 - Crisp text at any rotation: code is drawn at device-pixel scale on an offscreen canvas and perspective-mapped by WebGL (no slice seams), with a 2D fast path for unrotated 1:1 shots.
 - 5 color themes, 3 aspect ratios (16:9 / 9:16 / 1:1), adjustable speed and font size.
 - Export via `MediaRecorder` to WebM (Chrome / Edge work best).
@@ -119,6 +122,15 @@ Just open `index.html` in a modern browser. Licensed under the MIT License.
 ---
 
 ## 更新日志
+
+### 2026-09-19 · 拖动画布视角即写入关键帧
+
+- 基础版允许选点：点轨道上的关键帧或空白即选中一个时刻（播放头同步过去，选中的点与时刻有高亮圆环和虚线标记，`Esc` 取消），拖标尺定位会取消选点。
+- 拖动画布视角后自动打点：松手即把这段角度固化进水平 / 垂直旋转关键帧，同时写入两个通道，随后临时视角清零 —— 关键帧接过角度，画面不跳变；连续拖动会叠加到同一点上。
+- 有选点时写到选点那一刻；基础版没选点时自动落在拖动开始时的播放头时刻，高级版没选点则只保留临时视角不写入。
+- 旋转通道原本为空（由镜头运动预设驱动）时，写入前先按段采样一次基线锚点，避免一个点把整片角度都带跑；旋转通道值域放宽到 ±40° 以容纳拖动范围，超出时截断并提示。
+- 基础版重算（改代码 / 改选择）会保留用户手动打下的点，只重排自动点；基础版双击已有点可删除。
+- 右栏「视角」说明同步更新。
 
 ### 2026-09-19 · 基础版自动编排 / 高级版手动打点
 

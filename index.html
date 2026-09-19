@@ -155,6 +155,9 @@ select:focus{border-color:var(--line-2)}
 .tl-dot{fill:var(--panel);stroke:var(--accent);stroke-width:1.5;cursor:grab}
 .tl-dot.ro{cursor:default;stroke-width:1.2;opacity:.8}
 .tl-dot.on{fill:var(--accent)}
+.tl-dot.sel{fill:var(--accent);stroke:var(--txt);stroke-width:1.2}
+.tl-sel{stroke:var(--accent);stroke-width:1;stroke-dasharray:3 3;opacity:.75}
+.tl-dot.pick{cursor:pointer}
 .tl-caret{stroke:var(--txt);stroke-width:1.1;opacity:.85}
 .tl-caretmark{fill:var(--txt);opacity:.85}
 .tl-tag{font-size:8.5px;fill:var(--dim)}
@@ -319,7 +322,7 @@ canvas.dragging{cursor:grabbing}
         <span class="val" id="viewVal">0° · 0° · 0</span>
       </div>
       <button class="btn btn-ghost" id="btnResetView" style="width:100%">复位视角</button>
-      <p class="note" style="margin:9px 0 0">在画面上拖动可斜着看，滚轮调整远近，双击复位。</p>
+      <p class="note" style="margin:9px 0 0">拖动画面即把视角写入旋转关键帧（先在时间轴选点则写到那一刻）；滚轮调远近只是临时视角，双击复位。</p>
       <label class="switch mt10"><span>随光标跟随</span><input type="checkbox" id="optFollow"></label>
       <label class="switch"><span>自动运镜（3D）</span><input type="checkbox" id="optAutoCam"></label>
       <label class="switch"><span>行号</span><input type="checkbox" id="optGutter" checked></label>
@@ -1063,8 +1066,8 @@ const S = {
 const CH = [
   { id: 'speed', label: '速度', min: 0.25, max: 3.0, log: true, def: 1, fmt: v => v.toFixed(2) + '×' },
   { id: 'zoom', label: '缩放', min: 0.60, max: 1.6, log: false, def: 1, fmt: v => v.toFixed(2) + '×' },
-  { id: 'rotY', label: '水平旋转', min: -25, max: 25, log: false, def: 0, fmt: v => v.toFixed(1) + '°' },
-  { id: 'rotX', label: '垂直旋转', min: -25, max: 25, log: false, def: 0, fmt: v => v.toFixed(1) + '°' },
+  { id: 'rotY', label: '水平旋转', min: -40, max: 40, log: false, def: 0, fmt: v => v.toFixed(1) + '°' },
+  { id: 'rotX', label: '垂直旋转', min: -40, max: 40, log: false, def: 0, fmt: v => v.toFixed(1) + '°' },
 ];
 const DEG = Math.PI / 180;
 const KF_HIT = 9;             /* 关键帧命中半径（CSS 像素） */
@@ -1447,8 +1450,9 @@ function buildScene() {
   scene.clips = clips;
   scene.total = acc;
   scene.ready = clips.length > 0;
-  /* 基础版：按当前片段重新编排；高级版：保留手动数据，只把它收进片长内 */
+  /* 基础版：按当前片段重新编排（手动点保留）；高级版：保留手动数据，只把它收进片长内 */
   if (S.kfMode === 'basic') applyAuto(); else clampKeys();
+  if (tl.sel && tl.sel.t > scene.total) tl.sel = null;   /* 选点随时间轴收短而失效 */
   tl.dirty = true;                   /* 片段边界与总长都变了，时间轴需重绘 */
 
   player.t = clamp(player.t, 0, scene.total);
@@ -1608,9 +1612,85 @@ function autoKeys() {
   return K;
 }
 
+/* 合并自动编排与用户手动打的点：手动点优先，邻近的自动点让位 */
 function applyAuto() {
-  S.kf = autoKeys();
+  const K = autoKeys();
+  for (const id in K) {
+    for (const x of S.kf[id]) {
+      if (!x.man) continue;
+      const i = K[id].findIndex(k => Math.abs(k.t - x.t) < 0.05);
+      if (i >= 0) K[id].splice(i, 1);
+      K[id].push(x);
+    }
+    K[id].sort((a, b) => a.t - b.t);
+  }
+  S.kf = K;
+  clampKeys();
   tl.dirty = true;
+}
+
+/* ---------------- 8.1c 拖动画布视角 → 写入关键帧 ----------------
+   用户把画面拖到满意的角度后，视角被“固化”成一个旋转关键帧，随后临时视角清零。
+   写入前先把基线按段采样一次（通道原本由镜头运动预设驱动时），
+   否则只打一个点会让整片都变成这个角度。 */
+function setKfAt(ch, t, v) {
+  const arr = S.kf[ch];
+  let k = null;
+  for (const x of arr) if (Math.abs(x.t - t) < 0.05) { k = x; break; }
+  if (!k) {
+    k = { t: clamp(t, 0, Math.max(0.05, scene.total)), v };
+    arr.push(k);
+    arr.sort((a, b) => a.t - b.t);
+  }
+  k.v = v;
+  k.man = true;
+  return k;
+}
+
+function seedBaseline(ch) {
+  const arr = S.kf[ch];
+  for (const c of scene.clips) {
+    for (const u of [0, 0.85]) {
+      const t = c.t0 + c.D * u;
+      const cam = cameraFor(c, clamp(t - c.t0, 0, c.D), t);
+      arr.push({ t, v: (ch === 'rotX' ? cam.rotX : cam.rotY) / DEG, man: true });
+    }
+  }
+  arr.sort((a, b) => a.t - b.t);
+}
+
+/* 返回值：是否真的写入了关键帧 */
+function bakeView(fallbackT) {
+  if (!scene.ready) return false;
+  const t = tl.sel ? tl.sel.t : (fallbackT == null ? player.t : fallbackT);
+  const loc = locate(t);
+  if (!loc) return false;
+  const base = cameraFor(loc.clip, loc.te, t);      /* 不含临时视角与自动运镜 */
+  const rxC = CH[3], ryC = CH[2];
+  const rawX = (base.rotX + view3d.rotX) / DEG;
+  const rawY = (base.rotY + view3d.rotY) / DEG;
+  const wx = clamp(rawX, rxC.min, rxC.max);
+  const wy = clamp(rawY, ryC.min, ryC.max);
+  const cut = Math.abs(rawX - wx) > 0.05 || Math.abs(rawY - wy) > 0.05;
+
+  if (!S.kf.rotX.length) seedBaseline('rotX');
+  if (!S.kf.rotY.length) seedBaseline('rotY');
+  const kx = setKfAt('rotX', t, wx);
+  setKfAt('rotY', t, wy);
+
+  /* 临时视角清零后画面不变：关键帧已经把这段角度接过去了 */
+  view3d.rotX = 0;
+  view3d.rotY = 0;
+  viewTween = null;
+  updateViewLabel();
+  tl.sel = { t, ch: 'rotX', k: kx };
+  tl.dirty = true;
+  syncKfUI();
+  drawTimeline();
+  toast(cut
+    ? '已写入 ' + wy.toFixed(1) + '° / ' + wx.toFixed(1) + '°（已到 ±40° 上限）'
+    : '已写入视角 ' + wy.toFixed(1) + '° / ' + wx.toFixed(1) + '°');
+  return true;
 }
 
 /* ---------------- 8.2 时间轴面板 ----------------
@@ -1621,6 +1701,7 @@ const tl = {
   svg: null, W: 0, H: 0, dirty: true,
   gutter: 54, right: 10, rulerH: 16, clipH: 14, trackH: 26,
   head: null, headMark: null, drag: null,
+  sel: null,          /* 选点：{ t, ch, k } —— 拖动画布视角就写到这个时刻 */
 };
 
 function tlTrackY(i) { return tl.rulerH + tl.clipH + i * tl.trackH; }
@@ -1711,10 +1792,11 @@ function drawTimeline() {
     P.push(`<line class="tl-mid" x1="${x0}" y1="${ym}" x2="${x1}" y2="${ym}"/>`);
     const pts = tlPoints(i);
     if (pts) P.push(`<polyline class="tl-curve" points="${pts}"/>`);
-    const ro = S.kfMode === 'pro' ? '' : ' ro';
+    const ro = S.kfMode === 'pro' ? '' : ' ro pick';
     for (const k of S.kf[c.id]) {
       const on = tl.drag && tl.drag.k === k;
-      P.push(`<circle class="tl-dot${on ? ' on' : ''}${ro}" cx="${tlX(k.t).toFixed(1)}" cy="${tlY(i, k.v).toFixed(1)}" r="3.2"/>`);
+      const sl = tl.sel && tl.sel.k === k;
+      P.push(`<circle class="tl-dot${on ? ' on' : ''}${sl ? ' sel' : ''}${ro}" cx="${tlX(k.t).toFixed(1)}" cy="${tlY(i, k.v).toFixed(1)}" r="3.2"/>`);
     }
   });
   P.push('</g>');
@@ -1724,6 +1806,12 @@ function drawTimeline() {
   CH.forEach((c, i) => {
     P.push(`<text class="tl-lab" x="2" y="${(tlTrackY(i) + tl.trackH / 2 + 3.4).toFixed(1)}">${c.label}</text>`);
   });
+
+  /* 选点竖线：让“视角会写到哪一刻”一眼可见 */
+  if (tl.sel) {
+    const sx = tlX(tl.sel.t).toFixed(1);
+    P.push(`<line class="tl-sel" x1="${sx}" y1="${tlTrackY(0)}" x2="${sx}" y2="${H}"/>`);
+  }
 
   /* 播放头 */
   const hx = tlX(player.t).toFixed(1);
@@ -1764,6 +1852,7 @@ function scrubTo(x) {
   updatePlayIcon();
   player.t = clamp(tlT(x), 0, scene.total);
   $("#scrub").value = String(Math.round(player.t * 1000));
+  if (tl.sel) { tl.sel = null; syncKfUI(); tl.dirty = true; }   /* 定位与被选中的落点不再同步 */
   updatePlayhead();
 }
 
@@ -1805,8 +1894,15 @@ function bindTimeline() {
     }
     const i = tlTrackAt(p.y);
     if (i < 0) return;
-    if (S.kfMode !== 'pro') { kfHint(); return; }   /* 基础版只读，避免误改自动编排 */
     const j = tlHitKey(i, p.x, p.y);
+    if (S.kfMode !== 'pro') {
+      /* 基础版：点已有的点就选中它，点空白就选这一刻（真正落点在拖完视角时写下） */
+      const ks = S.kf[CH[i].id];
+      const t = j >= 0 ? ks[j].t : clamp(tlT(p.x), 0, scene.total);
+      selectAt(t, j >= 0 ? CH[i].id : null, j >= 0 ? ks[j] : null);
+      e.preventDefault();
+      return;
+    }
     if (j < 0) return;                    /* 空白处交给双击新增 */
     mode = 'key';
     tl.drag = { ch: CH[i].id, idx: j, k: S.kf[CH[i].id][j] };
@@ -1843,13 +1939,23 @@ function bindTimeline() {
 
   svg.addEventListener("dblclick", e => {
     if (!scene.ready) return;
-    if (S.kfMode !== 'pro') { kfHint(); return; }
     const p = tlPos(e);
     const i = tlTrackAt(p.y);
     if (i < 0) return;
     e.preventDefault();
     const ch = CH[i], arr = S.kf[ch.id];
     const j = tlHitKey(i, p.x, p.y);
+    if (S.kfMode !== 'pro') {
+      /* 基础版：双击已有的点删除它（拖视角写入的点也这样删） */
+      if (j < 0) return;
+      const gone = arr[j];
+      arr.splice(j, 1);
+      if (tl.sel && tl.sel.k === gone) tl.sel = null;
+      tl.dirty = true;
+      syncKfUI();
+      drawTimeline();
+      return;
+    }
     if (j >= 0) {
       arr.splice(j, 1);
     } else {
@@ -1875,21 +1981,32 @@ function bindTimeline() {
   });
 }
 
-let kfHinted = false;
-function kfHint() {
-  if (kfHinted) return;
-  kfHinted = true;
-  toast('基础版为自动编排，切到「高级版」即可手动打点');
+/* 基础版选点：顺带把播放头移到该时刻，做到「看到哪一刻就写到哪一刻」 */
+function selectAt(t, ch, k) {
+  tl.sel = { t, ch, k: k || null };
+  if (scene.ready) {
+    player.playing = false;
+    updatePlayIcon();
+    player.t = clamp(t, 0, scene.total);
+    $("#scrub").value = String(Math.round(player.t * 1000));
+  }
+  syncKfUI();
+  tl.dirty = true;
+  drawTimeline();
+  toast(k ? '已选中该点 · 拖动画布视角即可覆盖' : '已选点 ' + t.toFixed(2) + 's · 拖动画布视角即可写入');
 }
 
-/* 模式切换：基础版 = 自动编排（轨道只读） / 高级版 = 手动打点 */
+/* 模式切换：基础版 = 自动编排 + 拖视角写入 / 高级版 = 手动打点 */
 function syncKfUI() {
   const pro = S.kfMode === 'pro';
   const seg = $("#kfModeSeg");
   if (seg) [...seg.children].forEach(b => b.setAttribute('aria-pressed', b.dataset.kf === S.kfMode ? 'true' : 'false'));
-  $("#kfNote").textContent = pro
-    ? '双击轨道加关键帧 · 拖动改时机与数值 · 双击关键帧删除 · 拖标尺定位'
-    : '按出现方式与镜头运动自动编排四通道；改代码或改选择即重算，切「高级版」可手动微调';
+  const sel = tl.sel;
+  $("#kfNote").textContent = sel
+    ? '已选点 ' + sel.t.toFixed(2) + 's · 拖动画布视角即写入旋转关键帧（Esc 取消）'
+    : (pro
+      ? '双击轨道加关键帧 · 拖动改时机与数值 · 双击关键帧删除 · 拖标尺定位'
+      : '四通道已自动编排；点轨道选点后拖动画布视角即可写入');
   $("#btnKfAction").textContent = pro ? '清空关键帧' : '重新生成';
 }
 
@@ -2738,7 +2855,7 @@ function bindView3D() {
   cv.addEventListener("pointerdown", e => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
     viewTween = null;
-    drag = { x: e.clientX, y: e.clientY };
+    drag = { x: e.clientX, y: e.clientY, moved: false, t: player.t };
     cv.classList.add("dragging");
     try { cv.setPointerCapture(e.pointerId); } catch (err) { }
   });
@@ -2746,19 +2863,26 @@ function bindView3D() {
     if (!drag) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     drag.x = e.clientX; drag.y = e.clientY;
+    drag.moved = drag.moved || Math.abs(dx) + Math.abs(dy) > 1;
     /* “抓住平面拖动”的手感：向右拖右侧靠近观察者，向下拖下缘靠近观察者 */
     view3d.rotY = clamp(view3d.rotY - dx * 0.0065, VIEW_LIM.rotY[0], VIEW_LIM.rotY[1]);
     view3d.rotX = clamp(view3d.rotX + dy * 0.0050, VIEW_LIM.rotX[0], VIEW_LIM.rotX[1]);
     updateViewLabel();
   });
-  const stop = e => {
+  cv.addEventListener("pointerup", e => {
     if (!drag) return;
+    const d = drag;
     drag = null;
     cv.classList.remove("dragging");
     try { cv.releasePointerCapture(e.pointerId); } catch (err) { }
-  };
-  cv.addEventListener("pointerup", stop);
-  cv.addEventListener("pointercancel", stop);
+    /* 拖完视角即把这段角度固化成关键帧（有选点时写入选点，基础版自动落在拖动开始时的时刻） */
+    if (d.moved && (tl.sel || S.kfMode === 'basic')) bakeView(d.t);
+  });
+  cv.addEventListener("pointercancel", () => {
+    if (!drag) return;
+    drag = null;
+    cv.classList.remove("dragging");
+  });
   cv.addEventListener("wheel", e => {
     e.preventDefault();
     viewTween = null;
@@ -2867,6 +2991,7 @@ function bindUI() {
     if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
     if (e.code === 'Space') { e.preventDefault(); $("#btnPlay").click(); }
     if (e.code === 'KeyR') { $("#btnRestart").click(); }
+    if (e.code === 'Escape' && tl.sel) { tl.sel = null; syncKfUI(); tl.dirty = true; drawTimeline(); }
   });
 
   const ro = new ResizeObserver(() => scheduleBuild(120));
