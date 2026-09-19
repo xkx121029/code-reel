@@ -2590,11 +2590,10 @@ function buildFollowPath(clip) {
   const ref = scene.baseScale;
   /* 本段缩放最小值：关键帧通道是折线，极值只可能在段首段尾或关键帧上 */
   let zmin = kfValue('zoom', clip.t0, 1);
-  const zmax = kfValue('zoom', clip.t0 + T, 1);
   for (const k of S.kf.zoom) {
     if (k.t >= clip.t0 && k.t <= clip.t0 + T) zmin = Math.min(zmin, k.v);
   }
-  zmin = Math.max(0.15, Math.min(zmin, zmax));
+  zmin = Math.max(0.15, Math.min(zmin, kfValue('zoom', clip.t0 + T, 1)));
   const anchor = view.w / (6 * ref);                                     /* 左起 1/3，换算到平面单位 */
   const lim = Math.max(0, scene.planeW / 2 - view.w / (2 * ref * zmin)); /* 镜头行程：平面始终铺满视口 */
   const ms = scene.maxScroll;
