@@ -2314,6 +2314,8 @@ function kfNum(el, txt) {
 
 function kfDataSync() {
   const chSel = $("#kfCh");
+  /* 下拉跟随当前选中的点：在时间轴上点了哪条通道，面板就切到哪条 */
+  if (tl.sel && tl.sel.ch && tl.sel.ch !== chSel.value) chSel.value = tl.sel.ch;
   const chId = chSel.value || CH[0].id;
   const c = CH.find(x => x.id === chId) || CH[0];
   const s = chSpan(chId);
