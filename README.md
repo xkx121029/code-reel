@@ -12,7 +12,20 @@
 
 - **自动语言识别**：内置词法分析器，通过加权规则自动识别粘贴内容所属语言，也可手动指定。
 - **19 种语言语法着色**：JavaScript / TypeScript / Python / Java / Kotlin / C / C++ / C# / Go / Rust / Swift / PHP / Ruby / HTML / CSS / JSON / SQL / Shell / YAML，以及纯文本模式。着色由自研词法分析器完成，不依赖 highlight.js 等外部库。
-- **模版**：左栏一键套用整套「外观 + 动画编排」，套完直接可播 —— 电影感（打字机 · 缓推）、快闪（逐词 · 环绕 · 高对比）、讲义（逐行 · 浅色纸）、竖屏（9:16 · 环绕）。**模版不会覆盖已写好的代码**（代码为空时才会顺手载入配套示例）；另有「空模版」把代码、编排与参数一起清零，从零开始。
+- **模版**：左栏一键套用整套「外观 + 动画编排 + 一条变速曲线」，套完直接可播。八个预设各有性格：
+
+  | 模版 | 风格 | 变速曲线 |
+  | --- | --- | --- |
+  | 电影感 | 打字机 · 缓推 · 石墨 | 缓入缓出，收尾留白 |
+  | 快闪 | 逐词 · 环绕 · 荧光 | 急停急起，反复冲刺 |
+  | 讲义 | 逐行 · 静止 · 浅色纸 | 近乎匀速，只留轻微呼吸 |
+  | 竖屏 | 9:16 · 环绕 · 深海 | 先慢后爆，收尾回落 |
+  | 电报 | 打字机 · 静止 · 苔原 | 点划节奏，忽快忽慢 |
+  | 故障感 | 逐词 · 倾斜 · 荧光 · 自动运镜 | 高频抖动，强对比 |
+  | 延时 | 语法块 · 拉远 | 越写越快，末尾一收 |
+  | 慢读 | 逐行 · 拉远 · 浅色纸 | 平稳舒缓 |
+
+  **模版不会覆盖已写好的代码**（代码为空时才会顺手载入配套示例）；另有「空模版」把代码、编排与参数一起清零，从零开始。
 - **两个维度自由组合**：出现方式 × 镜头运动，取笛卡尔积串联成播放序列（上限 12 段）。
 
   | 出现方式 | 说明 | 镜头运动 | 说明 |
@@ -115,7 +128,7 @@ code_video/
 
 - Paste code → automatic language detection → syntax highlighting, powered by a small hand-written lexer (no highlight.js / no CDN).
 - 19 languages supported, plus plain text.
-- **Templates**: one click in the left column applies a whole look + animation setup (Cinematic / Punchy / Lecture / Vertical), ready to play. Templates never overwrite code you already wrote — a matching sample is loaded only when the editor is empty. "Empty template" resets code, arrangement and parameters.
+- **Templates**: one click in the left column applies a whole look + animation setup **plus its own speed curve** (Cinematic / Punchy / Lecture / Vertical / Telegram / Glitch / Timelapse / Calm), ready to play. The curve is defined per clip's typing progress, so the same rhythm replays in every segment and no segment can outrun its own typing window. Templates never overwrite code you already wrote — a matching sample is loaded only when the editor is empty. "Empty template" resets code, arrangement and parameters.
 - Two independent dimensions combined into one playback sequence: reveal style (typewriter / word / line / syntax block) × camera move (still / push in / pull out / orbit / tilt).
 - A keyframe timeline under the stage with four channels: speed (0.25–3× time remapping), zoom (0.6–1.6×), yaw and pitch (free within ±89°, so the plane never flips to its back side — the track range expands automatically to fit the data). One single mode: auto-arrangement writes a full default set from the current reveal × camera move selections and is recomputed whenever the code or selection changes, while the tracks stay editable the whole time (double-click to add, drag to retime/revalue, double-click to delete, drag the ruler to scrub). Anything you touch is flagged and survives recomputation; "Clear" empties the tracks and pauses the auto-arrangement, "Re-arrange" brings it back.
 - **Drag the canvas to write keyframes**: press to lock the target moment (a picked point if you have one, otherwise the current time) — the marker appears and playback pauses, so the target, the frame you see and the angle written all agree. Release to bake the angle into the yaw/pitch keyframes, only for the axes you actually dragged; the temporary view resets and the picture does not jump. Hold `Alt` while dragging to preview without writing anything.
@@ -129,6 +142,14 @@ Just open `index.html` in a modern browser. Licensed under the MIT License.
 ---
 
 ## 更新日志
+
+### 2026-09-19 · 模版加到八个，并自带变速曲线
+
+- 新增四个模版：**电报**（打字机 · 苔原 · 点划节奏）、**故障感**（逐词 · 倾斜 · 荧光 · 自动运镜 · 高频抖动）、**延时**（语法块 · 拉远 · 越写越快）、**慢读**（逐行 · 拉远 · 浅色纸 · 平稳），加上原有的电影感 / 快闪 / 讲义 / 竖屏共八个。
+- 每个模版都带一条**变速曲线**：曲线按「每段打字进度」定义，铺开成全局时间轴上的速度关键帧 —— 因为速度通道本来就是按段局部归一化的，所以同一套节奏会在每段忠实地重演一遍，强对比曲线也不会让哪段代码写不完。
+- 曲线随模版活着：改代码、改出现方式 / 镜头运动、点「重新编排」都会按当前段数与段长重铺；点「清空」或「空模版」则把模版一起摘掉（曲线清空、自动编排停下）。
+- 你手动打过 / 拖过的速度点优先，模版曲线在邻近处让位。
+- 时间轴提示会显示当前模版名（如「快闪」已就绪）。
 
 ### 2026-09-19 · 左栏加模版
 
