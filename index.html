@@ -325,7 +325,7 @@ canvas.dragging{cursor:grabbing}
         <span class="val" id="viewVal">0° · 0° · 0</span>
       </div>
       <button class="btn btn-ghost" id="btnResetView" style="width:100%">复位视角</button>
-      <p class="note" style="margin:9px 0 0">拖动画面即把视角写入旋转关键帧（先在时间轴选点则写到那一刻）；视角最多转到 ±89°，不会翻到背面。滚轮调远近只是临时视角，双击复位。</p>
+      <p class="note" style="margin:9px 0 0">拖动画布即把视角写入旋转关键帧：只写真正拖动的那个方向，先在时间轴选点则写到那一刻，按住 <b>Alt</b> 拖动只预览不写入。视角最多 ±89°，不会翻到背面；滚轮调远近是临时视角，双击复位。</p>
       <label class="switch mt10"><span>随光标跟随</span><input type="checkbox" id="optFollow"></label>
       <label class="switch"><span>自动运镜（3D）</span><input type="checkbox" id="optAutoCam"></label>
       <label class="switch"><span>行号</span><input type="checkbox" id="optGutter" checked></label>
@@ -1683,9 +1683,14 @@ function seedBaseline(ch) {
   arr.sort((a, b) => a.t - b.t);
 }
 
-/* 返回值：是否真的写入了关键帧 */
-function bakeView(fallbackT) {
+/* 把当前拖出来的视角固化成关键帧，随后清掉对应的临时视角 —— 画面不变。
+   axes 指定要写哪几条轴（只写真正拖动过的），缺省两条都写。
+   返回值：是否真的写入了关键帧 */
+function bakeView(fallbackT, axes) {
   if (!scene.ready) return false;
+  const doX = !axes || axes.rotX !== false;      /* 垂直旋转（俯仰） */
+  const doY = !axes || axes.rotY !== false;      /* 水平旋转（偏转） */
+  if (!doX && !doY) { view3d.rotX = 0; view3d.rotY = 0; updateViewLabel(); return false; }
   const t = tl.sel ? tl.sel.t : (fallbackT == null ? player.t : fallbackT);
   const loc = locate(t);
   if (!loc) return false;
@@ -1694,21 +1699,26 @@ function bakeView(fallbackT) {
   const wx = rotClamp((base.rotX + view3d.rotX) / DEG);
   const wy = rotClamp((base.rotY + view3d.rotY) / DEG);
 
-  if (!S.kf.rotX.length) seedBaseline('rotX');
-  if (!S.kf.rotY.length) seedBaseline('rotY');
-  const kx = setKfAt('rotX', t, wx);
-  setKfAt('rotY', t, wy);
+  let kx = null;
+  if (doX) {
+    if (!S.kf.rotX.length) seedBaseline('rotX');
+    kx = setKfAt('rotX', t, wx);
+  }
+  if (doY) {
+    if (!S.kf.rotY.length) seedBaseline('rotY');
+    setKfAt('rotY', t, wy);
+  }
 
-  /* 临时视角清零后画面不变：关键帧已经把这段角度接过去了 */
-  view3d.rotX = 0;
-  view3d.rotY = 0;
+  /* 只清掉写进去的那条轴：没写的轴继续当临时视角，画面同样不跳 */
+  if (doX) view3d.rotX = 0;
+  if (doY) view3d.rotY = 0;
   viewTween = null;
   updateViewLabel();
-  tl.sel = { t, ch: 'rotX', k: kx };
+  tl.sel = { t, ch: doX ? 'rotX' : 'rotY', k: doX ? kx : S.kf.rotY.find(k => Math.abs(k.t - t) < 0.05) };
   tl.dirty = true;
   syncKfUI();
   drawTimeline();
-  toast('已写入视角 ' + wy.toFixed(1) + '° / ' + wx.toFixed(1) + '°');
+  toast('已写入 ' + (doY ? '水平 ' + wy.toFixed(1) + '°' : '') + (doX && doY ? ' / ' : '') + (doX ? '垂直 ' + wx.toFixed(1) + '°' : ''));
   return true;
 }
 
@@ -2940,7 +2950,10 @@ function bindView3D() {
   cv.addEventListener("pointerdown", e => {
     if (e.pointerType === "mouse" && e.button !== 0) return;
     viewTween = null;
-    drag = { x: e.clientX, y: e.clientY, moved: false, t: player.t };
+    /* 落点先定下来：已有选点就写那儿，否则以当前时刻为落点。
+       同时暂停播放 —— 画面不再漂，落点、预告线、看到的画面三者才一致。 */
+    if (!e.altKey && scene.ready && !tl.sel) selectAt(player.t, null, null);
+    drag = { x: e.clientX, y: e.clientY, dx: 0, dy: 0, moved: false, alt: !!e.altKey, t: player.t };
     cv.classList.add("dragging");
     try { cv.setPointerCapture(e.pointerId); } catch (err) { }
   });
@@ -2948,6 +2961,7 @@ function bindView3D() {
     if (!drag) return;
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
     drag.x = e.clientX; drag.y = e.clientY;
+    drag.dx += dx; drag.dy += dy;
     drag.moved = drag.moved || Math.abs(dx) + Math.abs(dy) > 1;
     /* “抓住平面拖动”的手感：向右拖右侧靠近观察者，向下拖下缘靠近观察者；
      角度在 ±89° 内任意转，但不会翻到平面背面 */
@@ -2962,8 +2976,9 @@ function bindView3D() {
     drag = null;
     cv.classList.remove("dragging");
     try { cv.releasePointerCapture(e.pointerId); } catch (err) { }
-    /* 拖完视角即把这段角度固化成关键帧（有选点时写入选点，基础版自动落在拖动开始时的时刻） */
-    if (d.moved && (tl.sel || S.kfMode === 'basic')) bakeView(d.t);
+    if (d.alt || !d.moved) return;      /* 原地点击 / 按住 Alt 只预览，都不改数据 */
+    /* 只写真正拖动了的那条轴（阈值 2px ≈ 0.6°）：横向位移对应水平旋转，纵向对应垂直旋转 */
+    bakeView(d.t, { rotY: Math.abs(d.dx) >= 2, rotX: Math.abs(d.dy) >= 2 });
   });
   cv.addEventListener("pointercancel", () => {
     if (!drag) return;
