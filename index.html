@@ -2556,6 +2556,7 @@ function caretPlanePt(clip, t) {
    路径只依赖片段排期与速度通道，速度关键帧一变就按 key 重建。 */
 const FP_STEP = 1 / 120;      /* 采样网格 */
 const FP_WIN = 0.5;           /* 三角核半宽（秒）：越大越稳、越小越贴光标 */
+const FP_BIAS = 0.25;         /* 前瞻量（秒）：整段未来已知，提前为换行后的落点让位 */
 
 function fpKey() {
   const ks = S.kf.speed;
@@ -2598,7 +2599,7 @@ function buildFollowPath(clip) {
   const ms = scene.maxScroll;
   const X = new Float64Array(n), Y = new Float64Array(n);
   for (let i = 0; i < n; i++) {
-    const p = caretPlanePt(clip, Math.min(i * FP_STEP, clip.typeDur));
+    const p = caretPlanePt(clip, clamp(i * FP_STEP + FP_BIAS, 0, clip.typeDur));
     X[i] = clamp(-anchor - p.x, -lim, lim);
     Y[i] = clamp(p.y, -ms, ms);
   }
