@@ -263,7 +263,7 @@ canvas.dragging{cursor:grabbing}
       <div class="sec-h"><h2>模 版</h2><span class="note">不动你的代码</span></div>
       <div class="tpl-wrap" id="tplChips"></div>
       <button class="btn btn-ghost mt10" id="btnTplEmpty" style="width:100%">空模版 · 从零开始</button>
-      <p class="note" style="margin:9px 0 0">预设只改外观与动画编排，套用完直接可播；代码为空时顺便载入配套示例。空模版会清空代码、编排与参数，从头来。</p>
+      <p class="note" style="margin:9px 0 0">预设改外观 + 动画编排，并自带一条<b>变速曲线</b>，套完直接可播；代码为空时顺便载入配套示例。空模版会清空代码、编排与参数，从头来。</p>
     </div>
   </section>
 
@@ -1124,6 +1124,7 @@ const S = {
   /* 关键帧：按通道分开，键为 { t: 全局时间轴秒数, v: 数值 }，t 升序 */
   kf: { speed: [], zoom: [], rotX: [], rotY: [] },
   auto: true,            // 自动编排是否生效（点「清空」会停下，点「重新编排」恢复）
+  tpl: null,             // 套用过的模版 id（决定自动编排里用哪条变速曲线）
   snap: true,            // 关键帧拖动/选点/定位是否吸附
   ratio: 16 / 9,
   empty: false,
@@ -2190,6 +2191,7 @@ function bindTimeline() {
   $("#btnKfClear").addEventListener("click", () => {
     S.kf = { speed: [], zoom: [], rotX: [], rotY: [] };
     S.auto = false;
+    S.tpl = null;
     tl.sel = null;
     tl.dirty = true;
     syncKfUI();
@@ -2266,6 +2268,7 @@ function applyTemplate(t) {
   S.follow = t.follow;
   S.autoCam = t.autoCam;
   S.auto = true;                       /* 模版自带自动编排 */
+  S.tpl = t.id;                        /* 并带上这条变速曲线 */
   gradCache.key = '';
   resetViewNow();
   syncAllUI();
@@ -2295,6 +2298,7 @@ function emptyTemplate() {
   S.autoCam = false;
   S.kf = { speed: [], zoom: [], rotX: [], rotY: [] };
   S.auto = false;                      /* 空模版从零开始，不自动铺关键帧 */
+  S.tpl = null;
   tl.sel = null;
   gradCache.key = '';
   resetViewNow();
@@ -2312,10 +2316,12 @@ function emptyTemplate() {
 /* 提示文案：选点状态优先，其次是自动编排是否在跑 */
 function syncKfUI() {
   const sel = tl.sel;
+  const tpl = TEMPLATES.find(t => t.id === S.tpl);
   $("#kfNote").textContent = sel
     ? '已选点 ' + sel.t.toFixed(2) + 's · 拖动画布视角即写入旋转关键帧（Esc 取消）'
     : (S.auto
-      ? '自动编排已就绪 · 双击轨道加关键帧 · 拖动改时机与数值（自动吸附）· 拖动画布写入旋转'
+      ? (tpl ? '「' + tpl.label + '」已就绪 · ' : '自动编排已就绪 · ')
+        + '双击轨道加关键帧 · 拖动改时机与数值（自动吸附）· 拖动画布写入旋转'
       : '自动编排已停止（点「重新编排」恢复）· 轨道仍可手动打点');
 }
 /* ---------------- 9. 相机与投影 ---------------- */
