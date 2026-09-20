@@ -1508,6 +1508,13 @@ function buildScene() {
     fpCss *= availW / mc.W;
     mc = measureAt(fpCss, maxUnits, lines.length);
   }
+  /* 长代码还要看高度：只按宽度铺满的话，行数一多平面就会上下顶出视口被裁掉。
+     跟随模式靠镜头纵向滚动看全，不受这条限制；非跟随模式先缩字号，
+     缩到 9px 下限再由 fitScale 兜底（见下），保证整幅代码始终完整可见。 */
+  if (!S.follow && mc.H > availH) {
+    fpCss *= availH / mc.H;
+    mc = measureAt(fpCss, maxUnits, lines.length);
+  }
   fpCss = Math.max(9, Math.floor(fpCss));
 
   /* 设备像素渲染：画布/纹理尺寸设上限，避免超大平面吃光显存 */
@@ -1544,7 +1551,9 @@ function buildScene() {
 
   /* 屏幕比例：设备像素折算回 CSS 像素 */
   const planeCssW = scene.planeW / rs, planeCssH = scene.planeH / rs;
-  scene.fitScale = Math.min(1, availW / planeCssW);
+  /* 宽高都要装得下：字号已经缩到下限（9px）还不够高时，靠这里再整体缩一次，
+     否则超长代码仍会被舞台裁掉上下。跟随模式的收尾拉远也用它，语义一致。 */
+  scene.fitScale = Math.min(1, availW / planeCssW, availH / planeCssH);
   scene.baseScale = (S.follow ? 1 : scene.fitScale) / rs;
   scene.scroll = planeH * scene.baseScale > availH + 1;
   scene.maxScroll = Math.max(0, (planeH * scene.baseScale - availH) / 2) / scene.baseScale;
