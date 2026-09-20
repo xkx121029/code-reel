@@ -1159,8 +1159,10 @@ const S = {
   shadow: true,
   follow: false,         // 随光标跟随：镜头横移，把光标钉在左起 1/3 处
   autoCam: false,        // 自动运镜（3D 缓慢漂移）
-  /* 关键帧：按通道分开，键为 { t: 全局时间轴秒数, v: 数值 }，t 升序 */
-  kf: kfEmpty(),
+  /* 关键帧：按通道分开，键为 { t: 全局时间轴秒数, v: 数值 }，t 升序。
+     这里只能先占位：通道表 CH 在下面才定义，此刻调用 kfEmpty() 会撞上 TDZ
+     直接抛错把整个脚本带崩，所以等 CH 定义好再填（见下方 S.kf = kfEmpty()）。 */
+  kf: {},
   auto: true,            // 自动编排是否生效（点「清空」会停下，点「重新编排」恢复）
   tpl: null,             // 套用过的模版 id（决定自动编排里用哪条变速曲线）
   snap: true,            // 关键帧拖动/选点/定位是否吸附
@@ -1182,12 +1184,13 @@ const CH = [
   { id: 'panY', label: '升降 Y', min: -50, max: 50, log: false, def: 0, unit: '%', step: 1, fmt: v => v.toFixed(1) + '%' },
   { id: 'panZ', label: '推移 Z', min: -40, max: 40, log: false, def: 0, unit: '%', step: 1, fmt: v => v.toFixed(1) + '%' },
 ];
-/* 空关键帧表：通道清单只有这一处，清空 / 重置都走它，免得新增通道时漏掉某一处 */
+/* 空关键帧表：通道清单只有这一处，初始化 / 清空 / 空模版都走它，免得新增通道时漏掉某一处 */
 function kfEmpty() {
   const o = {};
   for (const c of CH) o[c.id] = [];
   return o;
 }
+S.kf = kfEmpty();
 
 const DEG = Math.PI / 180;
 const KF_HIT = 9;             /* 关键帧命中半径（CSS 像素） */
