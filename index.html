@@ -375,7 +375,7 @@ canvas.dragging{cursor:grabbing}
         <span class="val" id="viewVal">0° · 0° · 0</span>
       </div>
       <button class="btn btn-ghost" id="btnResetView" style="width:100%">复位视角</button>
-      <p class="note" style="margin:9px 0 0"><b>左键拖动</b>改视角（写旋转关键帧，最多 ±89° 不会翻到背面），<b>右键拖动</b>改坐标（画面 1:1 跟手平移，写横移 / 升降关键帧）；只写真正拖动的那个方向，先在时间轴选点则写到那一刻，按住 <b>Alt</b> 拖动只预览不写入。滚轮调远近是临时视角，双击复位。</p>
+      <p class="note" style="margin:9px 0 0"><b>左键拖动</b>改视角（写旋转关键帧，最多 ±89° 不会翻到背面），<b>中键拖动</b>改坐标（画面 1:1 跟手平移，写横移 / 升降关键帧）；只写真正拖动的那个方向，先在时间轴选点则写到那一刻，按住 <b>Alt</b> 拖动只预览不写入。滚轮调远近是临时视角，双击复位。</p>
       <label class="switch mt10"><span>随光标跟随</span><input type="checkbox" id="optFollow"></label>
       <label class="switch"><span>自动运镜（3D）</span><input type="checkbox" id="optAutoCam"></label>
       <label class="switch"><span>行号</span><input type="checkbox" id="optGutter" checked></label>
@@ -1221,7 +1221,7 @@ const scene = {
 const player = { t: 0, playing: false, last: 0, recording: false };
 
 /* 用户视角：叠加在动画相机之上。rotX/rotY = 左键拖出来的临时旋转（弧度，
-   可在 ±89° 内自由转但不会翻到背面），panX/panY = 右键拖出来的临时平移
+   可在 ±89° 内自由转但不会翻到背面），panX/panY = 中键拖出来的临时平移
    （百分比，与横移三轴同量纲），dist = 滚轮临时远近（不会穿过相机） */
 const view3d = { rotX: 0, rotY: 0, dist: 0, panX: 0, panY: 0 };
 
@@ -1256,7 +1256,7 @@ function applyView3D(cam) {
   cam.rotX += view3d.rotX;
   cam.rotY += view3d.rotY;
   cam.z += view3d.dist;
-  /* 右键拖出来的临时平移：百分比换算回投影空间，与横移三轴同一套量纲 */
+  /* 中键拖出来的临时平移：百分比换算回投影空间，与横移三轴同一套量纲 */
   cam.x += view3d.panX / 100 * view.w;
   cam.y += view3d.panY / 100 * view.h;
   return cam;
@@ -1869,7 +1869,7 @@ function seedBaseline(ch) {
 }
 
 /* 把当前拖出来的临时视角 / 位移固化成关键帧，随后清掉对应的临时量 —— 画面不变。
-   左键拖动写旋转（rotX / rotY），右键拖动写平移（panX / panY），两者规则完全一样：
+   左键拖动写旋转（rotX / rotY），中键拖动写平移（panX / panY），两者规则完全一样：
    axes 指定要写哪几条轴（只写真正拖动过的），缺省两条都写。
    返回值：是否真的写入了关键帧 */
 function bakeDrag(fallbackT, axes, pan) {
@@ -2355,7 +2355,7 @@ function selectAt(t, ch, k) {
   syncKfUI();
   tl.dirty = true;
   drawTimeline();
-  toast(k ? '已选中该点 · 拖动画布即可覆盖' : '已选点 ' + t.toFixed(2) + 's · 左键拖动写旋转、右键拖动写横移 / 升降');
+  toast(k ? '已选中该点 · 拖动画布即可覆盖' : '已选点 ' + t.toFixed(2) + 's · 左键拖动写旋转、中键拖动写横移 / 升降');
 }
 
 /* ---------------- 12.2 模版应用 ----------------
@@ -2592,10 +2592,10 @@ function syncKfUI() {
   const sel = tl.sel;
   const tpl = TEMPLATES.find(t => t.id === S.tpl);
   $("#kfNote").textContent = sel
-    ? '已选点 ' + sel.t.toFixed(2) + 's · 左键拖动写旋转、右键拖动写横移 / 升降（Esc 取消）'
+    ? '已选点 ' + sel.t.toFixed(2) + 's · 左键拖动写旋转、中键拖动写横移 / 升降（Esc 取消）'
     : (S.auto
       ? (tpl ? '「' + tpl.label + '」已就绪 · ' : '自动编排已就绪 · ')
-        + '双击轨道加关键帧 · 拖动改时机与数值（自动吸附）· 左键拖动写旋转、右键拖动写横移 / 升降'
+        + '双击轨道加关键帧 · 拖动改时机与数值（自动吸附）· 左键拖动写旋转、中键拖动写横移 / 升降'
       : '自动编排已停止（点「重新编排」恢复）· 轨道仍可手动打点');
   kfDataSync();                        /* 右栏数据面板跟随同一个选中状态 */
 }
@@ -3448,7 +3448,7 @@ let viewTween = null;
 function updateViewLabel() {
   const deg = v => Math.round(v * 180 / Math.PI);
   let s = `${deg(view3d.rotY)}° · ${deg(view3d.rotX)}° · ${Math.round(view3d.dist)}`;
-  /* 有临时平移时补上坐标，右键拖动“改了多少”才看得见 */
+  /* 有临时平移时补上坐标，中键拖动“改了多少”才看得见 */
   if (view3d.panX || view3d.panY) s += ` · ${Math.round(view3d.panX)}% / ${Math.round(view3d.panY)}%`;
   $("#viewVal").textContent = s;
 }
@@ -3477,11 +3477,13 @@ function stepViewTween(now) {
 function bindView3D() {
   let drag = null;
   cv.addEventListener("pointerdown", e => {
-    const pan = e.button === 2;                  /* 右键 = 平移相机坐标 */
+    /* 中键 = 平移相机坐标。右键不再占用 —— 右键菜单与右键手势都由浏览器接管，
+       页面拦不干净（会拖到一半被抢走），所以干脆还给浏览器。 */
+    const pan = e.button === 1;
     if (e.pointerType === "mouse" && e.button !== 0 && !pan) return;
-    /* 右键按下就把默认行为吞掉：浏览器的右键菜单与右键手势都是从这一次默认行为起手的，
-       不 preventDefault 的话拖到一半会被浏览器抢走（随后只剩一个 pointercancel，位移全丢）。
-       只吞右键 —— 左键吞了会连带掐掉兼容鼠标事件，双击复位（dblclick）就没了。 */
+    /* 中键按下吞掉默认行为：Windows 上的「自动滚动」从这一次默认行为起手，
+       不 preventDefault 的话拖到一半会被它接管（随后只剩一个 pointercancel，位移全丢）。
+       只吞中键 —— 左键吞了会连带掐掉兼容鼠标事件，双击复位（dblclick）就没了。 */
     if (pan) e.preventDefault();
     viewTween = null;
     /* 落点先定下来：已有选点就写那儿，否则以当前时刻为落点。
@@ -3498,7 +3500,7 @@ function bindView3D() {
     drag.dx += dx; drag.dy += dy;
     drag.moved = drag.moved || Math.abs(dx) + Math.abs(dy) > 1;
     if (drag.pan) {
-      /* 右键：抓住画面平移，1:1 跟手 —— 拖多少像素画面就走多少像素，
+      /* 中键：抓住画面平移，1:1 跟手 —— 拖多少像素画面就走多少像素，
          再换算成「相对视口宽 / 高」的百分比，写进横移 / 升降通道 */
       view3d.panX += dx / view.w * 100;
       view3d.panY += dy / view.h * 100;
@@ -3519,7 +3521,7 @@ function bindView3D() {
     try { cv.releasePointerCapture(e.pointerId); } catch (err) { }
     if (d.alt || !d.moved) return;      /* 原地点击 / 按住 Alt 只预览，都不改数据 */
     /* 只写真正拖动了的那条轴（阈值 2px）：左键横向 → 水平旋转、纵向 → 垂直旋转；
-       右键横向 → 横移、纵向 → 升降 */
+       中键横向 → 横移、纵向 → 升降 */
     if (d.pan) bakePan(d.t, { panX: Math.abs(d.dx) >= 2, panY: Math.abs(d.dy) >= 2 });
     else bakeView(d.t, { rotY: Math.abs(d.dx) >= 2, rotX: Math.abs(d.dy) >= 2 });
   });
@@ -3536,11 +3538,10 @@ function bindView3D() {
     updateViewLabel();
   }, { passive: false });
   cv.addEventListener("dblclick", resetView3D);
-  /* 右键用来拖平移，所以画布上不再弹右键菜单 */
-  cv.addEventListener("contextmenu", e => e.preventDefault());
-  /* 拖到画布外再松手时，菜单会挂在鼠标底下那个元素上（pointer capture 管不到
-     contextmenu 的重定向），所以在整个文档范围内压住：只要还在拖就不许弹 */
-  document.addEventListener("contextmenu", e => { if (drag) e.preventDefault(); });
+  /* 右键不再被占用，画布上恢复浏览器自己的右键菜单 */
+  /* 中键按下时压住兼容的 mousedown —— Windows 的「自动滚动」由它起手，
+     pointerdown 的 preventDefault 在某些浏览器里不会连带压住它，这里补一道 */
+  cv.addEventListener("mousedown", e => { if (e.button === 1) e.preventDefault(); });
   /* 画布本身不许被当成可拖拽内容，否则拖动会变成浏览器原生的拖拽 */
   cv.addEventListener("dragstart", e => e.preventDefault());
   $("#btnResetView").addEventListener("click", resetView3D);
