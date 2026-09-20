@@ -38,10 +38,11 @@
   | | | 横移 | 左右平移 |
 - **关键帧时间轴**：舞台下方是七通道关键帧编辑器 —— 速度（0.25~3×）、缩放（0.6~1.6×）、水平旋转与垂直旋转（**±89° 内自由**，轨道显示范围随数据自动外扩）、横移 X / 升降 Y / 推移 Z（镜头在空间里平移，单位是相对画面宽高与镜头距离的百分比，所以 16:9 / 9:16 / 1:1 与任何分辨率下横移观感一致）。顶部片段条标出每段的「出现方式 · 镜头运动」。
   - **自动编排（默认值）**：把当前「出现方式 × 镜头运动」直接翻译成整套关键帧 —— 速度按各出现方式的打字手感在段内交替「冲刺—放缓」（段越长脉冲越多，段尾收住），缩放按运动语义从段首走到段末（推近就一直推、段与段首尾相接成一次连贯运镜），环绕 / 倾斜段从头扫到段末（倾斜保持「开头即斜、随后归正」）。改代码或改选择即重算，你也可以随时手动编辑，**自己碰过的点（拖动 / 新增 / 拖视角写入）会被标记并保留**，不会被重算冲掉。
-  - **拖动画布视角即写入**：把画面拖到满意的角度松手，这段角度就固化成旋转关键帧，临时视角随之清零，画面不会有任何跳变。规则统一为一条 —— 先在时间轴选点就写到那一刻，没选点就以当前时刻为落点；**按下时就把落点定下来并画出标记、同时暂停播放**，所以落点、看的画面、写进去的角度三者始终一致。
-  - **只写真正拖动的方向**：横拖只写水平旋转、纵拖只写垂直旋转（阈值 2px ≈ 0.6°），不会顺手把另一条轴也钉住。
-  - **按住 `Alt` 拖动只预览**：不暂停、不落点、不写数据，临时视角留着，双击画面或「复位视角」即可清掉。
-  - **拖动可在 ±89° 内自由转，不会翻到平面背面**（正好 90° 会让画面塌成一条线，所以留 1° 余量）。整片此前没有旋转关键帧的话，会先按段采样一次原运镜基线，避免一个点把整片角度都带跑。
+  - **拖动画布即写入**：把画面拖到满意的角度或位置松手，这段就固化成关键帧，临时量随之清零，画面不会有任何跳变。规则统一为一条 —— 先在时间轴选点就写到那一刻，没选点就以当前时刻为落点；**按下时就把落点定下来并画出标记、同时暂停播放**，所以落点、看的画面、写进去的值三者始终一致。
+  - **左键拖动改视角，右键拖动改坐标**：左键拖出的是**旋转**（写水平 / 垂直旋转通道），右键拖出的是**相机平移**（写横移 X / 升降 Y 通道）—— 右键是「抓住画面」的手感，拖多少像素画面就走多少像素，1:1 跟手，换算成相对视口宽高的百分比写入通道。画布上不再弹右键菜单。
+  - **只写真正拖动的方向**：横拖只写横轴那条通道、纵拖只写纵轴那条通道（阈值 2px ≈ 0.6° / 0.2%），不会顺手把另一条轴也钉住。
+  - **按住 `Alt` 拖动只预览**：不暂停、不落点、不写数据，临时旋转与位移都留着，双击画面或「复位视角」即可清掉。
+  - **左键拖动可在 ±89° 内自由转，不会翻到平面背面**（正好 90° 会让画面塌成一条线，所以留 1° 余量）。整片此前没有旋转关键帧的话，会先按段采样一次原运镜基线，避免一个点把整片角度都带跑。右键平移同理 —— 拖动量加上当前基线不会越出通道值域，否则松手写入时会被夹回、画面在放手那一瞬跳一下。
   - **曲线上一键插点**：直接点在曲线上（±8px）就在那一刻插一个关键帧，取值就是曲线当前值 —— 形状不会跳，插完可以继续拖或删。点空白仍是「选点」（决定拖视角写到哪一刻）。
   - **右栏数据面板**：选中哪个关键帧，面板就切到对应通道并填入精确的时刻与数值，可直接手输改（越界自动夹取，旋转通道夹到 ±89°）；还能「上一帧 / 下一帧」逐点跳转、在播放头处「新建点」、「删除点」。
   - **轨道随时可编辑**：双击轨道空白加关键帧、拖动同时改时机与数值（跟浮动数值气泡）、双击关键帧删除、点空白选点、拖标尺定位。没有模式开关 —— 自动编排只是「随时可再生的默认值」，想从头自己摆就点「清空」（同时会停下自动编排，避免改代码又被塞回来），想要回默认就点「重新编排」。
@@ -80,7 +81,7 @@ git clone https://gitee.com/xkx1029/code-reel.git
   - 快捷键：`空格` 播放 / 暂停，`R` 重播。
   - 时间轴七条轨道自上而下为速度 / 缩放 / 水平旋转 / 垂直旋转 / 横移 X / 升降 Y / 推移 Z；时间轴坐标与播放条共用同一个播放位置。
   - 时间轴右侧是「吸附」「重新编排」「清空」三个按钮 —— 没有模式切换，各通道随时可编辑。
-  - 点轨道空白即选中一个时刻（播放头同步过去，`Esc` 取消），随后在画面上拖动视角就会把角度写到那一刻；**点在曲线上直接插点**、双击空白加关键帧、双击已有点删除、拖动关键帧改时机与数值。
+  - 点轨道空白即选中一个时刻（播放头同步过去，`Esc` 取消），随后在画面上**左键拖动写旋转、右键拖动写横移 / 升降**就会把值写到那一刻；**点在曲线上直接插点**、双击空白加关键帧、双击已有点删除、拖动关键帧改时机与数值。
 - **右栏 · 参数**：
   - 关键帧数据面板：通道下拉 + 时刻 / 数值输入框 + 上一帧 / 下一帧 / 新建点 / 删除点，与时间轴的选中状态双向联动
   - 出现方式与镜头运动（各自可多选，组合成播放序列）
@@ -135,7 +136,7 @@ code_video/
 - **Templates**: one click in the left column applies a whole look + animation setup **plus its own speed curve** (Cinematic / Punchy / Lecture / Vertical / Telegram / Glitch / Timelapse / Calm), ready to play. The curve is defined per clip's typing progress, so the same rhythm replays in every segment and no segment can outrun its own typing window. Templates never overwrite code you already wrote — a matching sample is loaded only when the editor is empty. "Empty template" resets code, arrangement and parameters.
 - Two independent dimensions combined into one playback sequence: reveal style (typewriter / word / line / syntax block) × camera move (still / push in / pull out / orbit / tilt / truck).
 - A keyframe timeline under the stage with seven channels: speed (0.25–3× time remapping), zoom (0.6–1.6×), yaw and pitch (free within ±89°, so the plane never flips to its back side — the track range expands automatically to fit the data), plus camera translation on X / Y / Z (truck, boom, dolly) expressed as a percentage of viewport width / height / lens distance, so the same numbers read the same in any aspect ratio or resolution. One single mode: auto-arrangement writes a full default set from the current reveal × camera move selections and is recomputed whenever the code or selection changes, while the tracks stay editable the whole time (double-click to add, drag to retime/revalue, double-click to delete, drag the ruler to scrub). Anything you touch is flagged and survives recomputation; "Clear" empties the tracks and pauses the auto-arrangement, "Re-arrange" brings it back. **Clicking directly on a curve** inserts a keyframe there (value = the curve's current value, so the shape does not jump), and the **keyframe data panel** in the right column shows the selected keyframe's exact time and value with editable number inputs, plus prev/next keyframe hopping, new and delete.
-- **Drag the canvas to write keyframes**: press to lock the target moment (a picked point if you have one, otherwise the current time) — the marker appears and playback pauses, so the target, the frame you see and the angle written all agree. Release to bake the angle into the yaw/pitch keyframes, only for the axes you actually dragged; the temporary view resets and the picture does not jump. Hold `Alt` while dragging to preview without writing anything.
+- **Drag the canvas to write keyframes**: press to lock the target moment (a picked point if you have one, otherwise the current time) — the marker appears and playback pauses, so the target, the frame you see and the value written all agree. **Left-drag** edits the view (yaw/pitch rotation), **right-drag** edits the camera position (truck X / boom Y translation, grabbing the picture 1:1 so it follows the cursor pixel for pixel). Release to bake only the axes you actually dragged; the temporary offsets reset and the picture does not jump. The canvas context menu is suppressed. Hold `Alt` while dragging to preview without writing anything.
 - **Snapping** (on by default, toggle in the timeline header, `Alt` to bypass): times snap to clip start / typing end / clip end, the playhead, ruler ticks and keyframes of the other channels; values snap to the channel baseline (1× / 1× / 0°) and to other keyframes of the same channel. 7px engage radius, 12px release radius, with guide lines while snapped.
 - Crisp text at any rotation: code is drawn at device-pixel scale on an offscreen canvas and perspective-mapped by WebGL (no slice seams), with a 2D fast path for unrotated 1:1 shots.
 - 5 color themes, 3 aspect ratios (16:9 / 9:16 / 1:1), adjustable speed and font size.
@@ -146,6 +147,14 @@ Just open `index.html` in a modern browser. Licensed under the MIT License.
 ---
 
 ## 更新日志
+
+### 2026-09-20 · 右键拖动改相机坐标
+
+- **左键拖动改视角，右键拖动改坐标**：左键拖出旋转（写水平 / 垂直旋转通道），右键拖出相机平移（写横移 X / 升降 Y 通道）。右键是「抓住画面」的手感 —— 拖多少像素画面就走多少像素，1:1 跟手，再按视口宽高换算成百分比写入通道，所以任何画幅下「拖这么远」都是同一段位移。
+- 两条路径共用同一套固化逻辑（`bakeDrag`）：落点规则、只写真正拖动过的那条轴（阈值 2px）、`Alt` 只预览、原地点击不写数据、松手后临时量清零画面不跳 —— 完全一致，不再各写一份。
+- 拖动过程中就按「当前基线 + 拖动量」限制在通道值域内（横移 / 升降 ±50%），避免松手写入时被夹回、画面在放手那一瞬跳一下。
+- 视角标签在有临时位移时补显坐标（`… · 12% / -4%`），右键拖了多少看得见；双击复位与「复位视角」会把旋转、远近、位移一起清掉。
+- 画布上不再弹右键菜单（右键已被拖动占用）。
 
 ### 2026-09-20 · 修复「界面元素全部消失」的启动崩溃
 

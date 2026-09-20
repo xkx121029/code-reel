@@ -373,7 +373,7 @@ canvas.dragging{cursor:grabbing}
         <span class="val" id="viewVal">0° · 0° · 0</span>
       </div>
       <button class="btn btn-ghost" id="btnResetView" style="width:100%">复位视角</button>
-      <p class="note" style="margin:9px 0 0">拖动画布即把视角写入旋转关键帧：只写真正拖动的那个方向，先在时间轴选点则写到那一刻，按住 <b>Alt</b> 拖动只预览不写入。视角最多 ±89°，不会翻到背面；滚轮调远近是临时视角，双击复位。</p>
+      <p class="note" style="margin:9px 0 0"><b>左键拖动</b>改视角（写旋转关键帧，最多 ±89° 不会翻到背面），<b>右键拖动</b>改坐标（画面 1:1 跟手平移，写横移 / 升降关键帧）；只写真正拖动的那个方向，先在时间轴选点则写到那一刻，按住 <b>Alt</b> 拖动只预览不写入。滚轮调远近是临时视角，双击复位。</p>
       <label class="switch mt10"><span>随光标跟随</span><input type="checkbox" id="optFollow"></label>
       <label class="switch"><span>自动运镜（3D）</span><input type="checkbox" id="optAutoCam"></label>
       <label class="switch"><span>行号</span><input type="checkbox" id="optGutter" checked></label>
@@ -1192,6 +1192,10 @@ function kfEmpty() {
 }
 S.kf = kfEmpty();
 
+/* 通道查表：按 id 直接取通道定义（值域、基准值），供视角限制与写入使用 */
+const CHP = {};
+for (const c of CH) CHP[c.id] = c;
+
 const DEG = Math.PI / 180;
 const KF_HIT = 9;             /* 关键帧命中半径（CSS 像素） */
 /* 旋转上限：合成角度（镜头基线 + 临时视角 + 自动运镜）不许越过 ±89°，
@@ -1214,9 +1218,10 @@ const scene = {
 
 const player = { t: 0, playing: false, last: 0, recording: false };
 
-/* 用户视角：叠加在动画相机之上（拖动转视角 / 滚轮调距离）
-   角度可在 ±89° 内自由转但不会翻到背面，距离同样受限（不能穿过相机） */
-const view3d = { rotX: 0, rotY: 0, dist: 0 };
+/* 用户视角：叠加在动画相机之上。rotX/rotY = 左键拖出来的临时旋转（弧度，
+   可在 ±89° 内自由转但不会翻到背面），panX/panY = 右键拖出来的临时平移
+   （百分比，与横移三轴同量纲），dist = 滚轮临时远近（不会穿过相机） */
+const view3d = { rotX: 0, rotY: 0, dist: 0, panX: 0, panY: 0 };
 
 /* 滚轮远近范围随镜头距离等比缩放，保证“贴近/远离”的手感一致 */
 function distLimit() {
@@ -1228,9 +1233,14 @@ function distLimit() {
    所以天然拖不到背面；基线本身越界（旧数据）时也还能把视角拉回来。 */
 function limitView() {
   const loc = scene.ready ? locate(player.t) : null;
-  const b = loc ? cameraFor(loc.clip, loc.te, player.t) : { rotX: 0, rotY: 0 };
+  const b = loc ? cameraFor(loc.clip, loc.te, player.t) : { rotX: 0, rotY: 0, x: 0, y: 0 };
   view3d.rotY = clamp(view3d.rotY, -VIEW_MAX - b.rotY, VIEW_MAX - b.rotY);
   view3d.rotX = clamp(view3d.rotX, -VIEW_MAX - b.rotX, VIEW_MAX - b.rotX);
+  /* 平移同理：拖动量加上当前基线不许越出通道值域，
+     否则松手写入时会被夹回，画面会在放手那一瞬跳一下 */
+  const bx = b.x / view.w * 100, by = b.y / view.h * 100;
+  view3d.panX = clamp(view3d.panX, CHP.panX.min - bx, CHP.panX.max - bx);
+  view3d.panY = clamp(view3d.panY, CHP.panY.min - by, CHP.panY.max - by);
 }
 
 /* 兜底：任何来源（关键帧数据、自动运镜叠加）都不许越过 ±89° */
@@ -1244,6 +1254,9 @@ function applyView3D(cam) {
   cam.rotX += view3d.rotX;
   cam.rotY += view3d.rotY;
   cam.z += view3d.dist;
+  /* 右键拖出来的临时平移：百分比换算回投影空间，与横移三轴同一套量纲 */
+  cam.x += view3d.panX / 100 * view.w;
+  cam.y += view3d.panY / 100 * view.h;
   return cam;
 }
 
@@ -1841,50 +1854,75 @@ function seedBaseline(ch) {
     for (const u of [0, 0.85]) {
       const t = c.t0 + c.D * u;
       const cam = cameraFor(c, clamp(t - c.t0, 0, c.D), t);
-      arr.push({ t, v: (ch === 'rotX' ? cam.rotX : cam.rotY) / DEG, man: true });
+      /* 各通道把自己的相机量换算回通道单位：角度是度，平移是百分比 */
+      let v;
+      if (ch === 'panX') v = cam.x / view.w * 100;
+      else if (ch === 'panY') v = cam.y / view.h * 100;
+      else if (ch === 'panZ') v = cam.z / cam.persp * 100;
+      else v = (ch === 'rotX' ? cam.rotX : cam.rotY) / DEG;
+      arr.push({ t, v, man: true });
     }
   }
   arr.sort((a, b) => a.t - b.t);
 }
 
-/* 把当前拖出来的视角固化成关键帧，随后清掉对应的临时视角 —— 画面不变。
+/* 把当前拖出来的临时视角 / 位移固化成关键帧，随后清掉对应的临时量 —— 画面不变。
+   左键拖动写旋转（rotX / rotY），右键拖动写平移（panX / panY），两者规则完全一样：
    axes 指定要写哪几条轴（只写真正拖动过的），缺省两条都写。
    返回值：是否真的写入了关键帧 */
-function bakeView(fallbackT, axes) {
+function bakeDrag(fallbackT, axes, pan) {
   if (!scene.ready) return false;
-  const doX = !axes || axes.rotX !== false;      /* 垂直旋转（俯仰） */
-  const doY = !axes || axes.rotY !== false;      /* 水平旋转（偏转） */
-  if (!doX && !doY) { view3d.rotX = 0; view3d.rotY = 0; updateViewLabel(); return false; }
+  const cA = pan ? 'panX' : 'rotX';              /* 横向：横移 / 垂直旋转（俯仰） */
+  const cB = pan ? 'panY' : 'rotY';              /* 纵向：升降 / 水平旋转（偏转） */
+  const doA = !axes || axes[cA] !== false;
+  const doB = !axes || axes[cB] !== false;
+  if (!doA && !doB) {
+    if (pan) { view3d.panX = 0; view3d.panY = 0; } else { view3d.rotX = 0; view3d.rotY = 0; }
+    updateViewLabel();
+    return false;
+  }
   const t = tl.sel ? tl.sel.t : (fallbackT == null ? player.t : fallbackT);
   const loc = locate(t);
   if (!loc) return false;
-  const base = cameraFor(loc.clip, loc.te, t);      /* 不含临时视角与自动运镜 */
-  /* 写入合成角度（限在 ±89° 内，翻不到背面）；拖动时已被同样限制，所以不会跳变 */
-  const wx = rotClamp((base.rotX + view3d.rotX) / DEG);
-  const wy = rotClamp((base.rotY + view3d.rotY) / DEG);
+  const base = cameraFor(loc.clip, loc.te, t);      /* 不含临时量 */
+  /* 写入合成值：旋转限在 ±89° 内（翻不到背面），平移限在通道值域内；
+     拖动时已被同样限制，所以放手不会跳变 */
+  const vA = pan
+    ? clamp(base.x / view.w * 100 + view3d.panX, CHP.panX.min, CHP.panX.max)
+    : rotClamp((base.rotX + view3d.rotX) / DEG);
+  const vB = pan
+    ? clamp(base.y / view.h * 100 + view3d.panY, CHP.panY.min, CHP.panY.max)
+    : rotClamp((base.rotY + view3d.rotY) / DEG);
 
-  let kx = null;
-  if (doX) {
-    if (!S.kf.rotX.length) seedBaseline('rotX');
-    kx = setKfAt('rotX', t, wx);
+  let kA = null;
+  if (doA) {
+    if (!S.kf[cA].length) seedBaseline(cA);
+    kA = setKfAt(cA, t, vA);
   }
-  if (doY) {
-    if (!S.kf.rotY.length) seedBaseline('rotY');
-    setKfAt('rotY', t, wy);
+  if (doB) {
+    if (!S.kf[cB].length) seedBaseline(cB);
+    setKfAt(cB, t, vB);
   }
 
-  /* 只清掉写进去的那条轴：没写的轴继续当临时视角，画面同样不跳 */
-  if (doX) view3d.rotX = 0;
-  if (doY) view3d.rotY = 0;
+  /* 只清掉写进去的那条轴：没写的轴继续当临时量，画面同样不跳 */
+  if (doA) { if (pan) view3d.panX = 0; else view3d.rotX = 0; }
+  if (doB) { if (pan) view3d.panY = 0; else view3d.rotY = 0; }
   viewTween = null;
   updateViewLabel();
-  tl.sel = { t, ch: doX ? 'rotX' : 'rotY', k: doX ? kx : S.kf.rotY.find(k => Math.abs(k.t - t) < 0.05) };
+  tl.sel = { t, ch: doA ? cA : cB, k: doA ? kA : S.kf[cB].find(k => Math.abs(k.t - t) < 0.05) };
   tl.dirty = true;
   syncKfUI();
   drawTimeline();
-  toast('已写入 ' + (doY ? '水平 ' + wy.toFixed(1) + '°' : '') + (doX && doY ? ' / ' : '') + (doX ? '垂直 ' + wx.toFixed(1) + '°' : ''));
+  const unit = pan ? '%' : '°';
+  const nameA = pan ? '横移 ' : '垂直 ';
+  const nameB = pan ? '升降 ' : '水平 ';
+  toast('已写入 ' + (doB ? nameB + vB.toFixed(1) + unit : '') + (doA && doB ? ' / ' : '')
+    + (doA ? nameA + vA.toFixed(1) + unit : ''));
   return true;
 }
+
+function bakeView(fallbackT, axes) { return bakeDrag(fallbackT, axes, false); }
+function bakePan(fallbackT, axes) { return bakeDrag(fallbackT, axes, true); }
 
 /* ---------------- 8.2 时间轴面板 ----------------
    舞台下方横幅：顶部时间标尺 + 片段条（出现方式 · 镜头运动）+ 各通道轨道
@@ -2315,7 +2353,7 @@ function selectAt(t, ch, k) {
   syncKfUI();
   tl.dirty = true;
   drawTimeline();
-  toast(k ? '已选中该点 · 拖动画布视角即可覆盖' : '已选点 ' + t.toFixed(2) + 's · 拖动画布视角即可写入');
+  toast(k ? '已选中该点 · 拖动画布即可覆盖' : '已选点 ' + t.toFixed(2) + 's · 左键拖动写旋转、右键拖动写横移 / 升降');
 }
 
 /* ---------------- 12.2 模版应用 ----------------
@@ -2552,10 +2590,10 @@ function syncKfUI() {
   const sel = tl.sel;
   const tpl = TEMPLATES.find(t => t.id === S.tpl);
   $("#kfNote").textContent = sel
-    ? '已选点 ' + sel.t.toFixed(2) + 's · 拖动画布视角即写入旋转关键帧（Esc 取消）'
+    ? '已选点 ' + sel.t.toFixed(2) + 's · 左键拖动写旋转、右键拖动写横移 / 升降（Esc 取消）'
     : (S.auto
       ? (tpl ? '「' + tpl.label + '」已就绪 · ' : '自动编排已就绪 · ')
-        + '双击轨道加关键帧 · 拖动改时机与数值（自动吸附）· 拖动画布写入旋转'
+        + '双击轨道加关键帧 · 拖动改时机与数值（自动吸附）· 左键拖动写旋转、右键拖动写横移 / 升降'
       : '自动编排已停止（点「重新编排」恢复）· 轨道仍可手动打点');
   kfDataSync();                        /* 右栏数据面板跟随同一个选中状态 */
 }
@@ -3407,12 +3445,18 @@ let viewTween = null;
 
 function updateViewLabel() {
   const deg = v => Math.round(v * 180 / Math.PI);
-  $("#viewVal").textContent = `${deg(view3d.rotY)}° · ${deg(view3d.rotX)}° · ${Math.round(view3d.dist)}`;
+  let s = `${deg(view3d.rotY)}° · ${deg(view3d.rotX)}° · ${Math.round(view3d.dist)}`;
+  /* 有临时平移时补上坐标，右键拖动“改了多少”才看得见 */
+  if (view3d.panX || view3d.panY) s += ` · ${Math.round(view3d.panX)}% / ${Math.round(view3d.panY)}%`;
+  $("#viewVal").textContent = s;
 }
 
 function resetView3D() {
-  if (!view3d.rotX && !view3d.rotY && !view3d.dist) return;
-  viewTween = { from: { rotX: view3d.rotX, rotY: view3d.rotY, dist: view3d.dist }, start: performance.now(), dur: 340 };
+  if (!view3d.rotX && !view3d.rotY && !view3d.dist && !view3d.panX && !view3d.panY) return;
+  viewTween = {
+    from: { rotX: view3d.rotX, rotY: view3d.rotY, dist: view3d.dist, panX: view3d.panX, panY: view3d.panY },
+    start: performance.now(), dur: 340,
+  };
 }
 
 function stepViewTween(now) {
@@ -3422,19 +3466,22 @@ function stepViewTween(now) {
   view3d.rotX = lerp(viewTween.from.rotX, 0, e);
   view3d.rotY = lerp(viewTween.from.rotY, 0, e);
   view3d.dist = lerp(viewTween.from.dist, 0, e);
+  view3d.panX = lerp(viewTween.from.panX, 0, e);
+  view3d.panY = lerp(viewTween.from.panY, 0, e);
   updateViewLabel();
-  if (k >= 1) { viewTween = null; view3d.rotX = 0; view3d.rotY = 0; view3d.dist = 0; }
+  if (k >= 1) { viewTween = null; view3d.rotX = 0; view3d.rotY = 0; view3d.dist = 0; view3d.panX = 0; view3d.panY = 0; }
 }
 
 function bindView3D() {
   let drag = null;
   cv.addEventListener("pointerdown", e => {
-    if (e.pointerType === "mouse" && e.button !== 0) return;
+    const pan = e.button === 2;                  /* 右键 = 平移相机坐标 */
+    if (e.pointerType === "mouse" && e.button !== 0 && !pan) return;
     viewTween = null;
     /* 落点先定下来：已有选点就写那儿，否则以当前时刻为落点。
        同时暂停播放 —— 画面不再漂，落点、预告线、看到的画面三者才一致。 */
     if (!e.altKey && scene.ready && !tl.sel) selectAt(player.t, null, null);
-    drag = { x: e.clientX, y: e.clientY, dx: 0, dy: 0, moved: false, alt: !!e.altKey, t: player.t };
+    drag = { x: e.clientX, y: e.clientY, dx: 0, dy: 0, moved: false, alt: !!e.altKey, t: player.t, pan };
     cv.classList.add("dragging");
     try { cv.setPointerCapture(e.pointerId); } catch (err) { }
   });
@@ -3444,10 +3491,17 @@ function bindView3D() {
     drag.x = e.clientX; drag.y = e.clientY;
     drag.dx += dx; drag.dy += dy;
     drag.moved = drag.moved || Math.abs(dx) + Math.abs(dy) > 1;
-    /* “抓住平面拖动”的手感：向右拖右侧靠近观察者，向下拖下缘靠近观察者；
-     角度在 ±89° 内任意转，但不会翻到平面背面 */
-    view3d.rotY -= dx * 0.0065;
-    view3d.rotX += dy * 0.0050;
+    if (drag.pan) {
+      /* 右键：抓住画面平移，1:1 跟手 —— 拖多少像素画面就走多少像素，
+         再换算成「相对视口宽 / 高」的百分比，写进横移 / 升降通道 */
+      view3d.panX += dx / view.w * 100;
+      view3d.panY += dy / view.h * 100;
+    } else {
+      /* “抓住平面拖动”的手感：向右拖右侧靠近观察者，向下拖下缘靠近观察者；
+       角度在 ±89° 内任意转，但不会翻到平面背面 */
+      view3d.rotY -= dx * 0.0065;
+      view3d.rotX += dy * 0.0050;
+    }
     limitView();
     updateViewLabel();
   });
@@ -3458,8 +3512,10 @@ function bindView3D() {
     cv.classList.remove("dragging");
     try { cv.releasePointerCapture(e.pointerId); } catch (err) { }
     if (d.alt || !d.moved) return;      /* 原地点击 / 按住 Alt 只预览，都不改数据 */
-    /* 只写真正拖动了的那条轴（阈值 2px ≈ 0.6°）：横向位移对应水平旋转，纵向对应垂直旋转 */
-    bakeView(d.t, { rotY: Math.abs(d.dx) >= 2, rotX: Math.abs(d.dy) >= 2 });
+    /* 只写真正拖动了的那条轴（阈值 2px）：左键横向 → 水平旋转、纵向 → 垂直旋转；
+       右键横向 → 横移、纵向 → 升降 */
+    if (d.pan) bakePan(d.t, { panX: Math.abs(d.dx) >= 2, panY: Math.abs(d.dy) >= 2 });
+    else bakeView(d.t, { rotY: Math.abs(d.dx) >= 2, rotX: Math.abs(d.dy) >= 2 });
   });
   cv.addEventListener("pointercancel", () => {
     if (!drag) return;
@@ -3474,6 +3530,8 @@ function bindView3D() {
     updateViewLabel();
   }, { passive: false });
   cv.addEventListener("dblclick", resetView3D);
+  /* 右键用来拖平移，所以画布上不再弹右键菜单 */
+  cv.addEventListener("contextmenu", e => e.preventDefault());
   $("#btnResetView").addEventListener("click", resetView3D);
 }
 
