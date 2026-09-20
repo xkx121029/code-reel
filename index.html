@@ -3799,14 +3799,14 @@ function exportVideo() {
    关键帧 / 播放头 / 临时视角），再叠三层：纯排版画面、中文字幕、模拟光标。
    因为 DOM 界面没法被 canvas 录制，导出改走系统录屏（getDisplayMedia）。
    ========================================================= */
-const PROMO_TOTAL = 180;
+const PROMO_TOTAL = 240;
 
 const PROMO = {
   on: /[?&]promo=1\b/.test(location.search),
   still: /[?&]still=1\b/.test(location.search),
   t: 0, playing: false, barHide: false,
   stageT: 0, cue: '', beat: null, sceneId: '', fxId: '', subIdx: -2,
-  fxRef: null, focus: null, hlEl: null, cx: 960, cy: 540, dragged: false,
+  fxRef: null, focus: null, hlEl: null, cx: 960, cy: 540, baked: false,
   rec: null, recOn: false, chunks: [], recTimer: 0,
   frame: null, fx: null, fxBody: null, grid: null, sub: null, cur: null, rip: null, bar: null,
 };
@@ -3863,45 +3863,60 @@ function prect(target) {
            cx: (r.left - f.left + r.width / 2) / k, cy: (r.top - f.top + r.height / 2) / k };
 }
 
-/* ---------------- 15.2 时间轴：8 场 + 中文字幕 ---------------- */
+/* ---------------- 15.2 时间轴：11 场 + 中文字幕 ----------------
+   四场界面戏之间插三张纯排版页（对比 / 数据 / 场景）。连续两张排版页之间
+   不做交叉淡化 —— 新页的元素本来就从 0 淡入，切过去就是干净的换页。 */
 const PSC = [
-  { id: 'open', from: 0, to: 14, fx: 1 },
-  { id: 'id', from: 14, to: 30, fx: 1 },
-  { id: 'ui', from: 30, to: 64, fx: 0 },
-  { id: 'tpl', from: 64, to: 96, fx: 0 },
-  { id: 'move', from: 96, to: 126, fx: 0 },
-  { id: 'kf',   from: 126, to: 156, fx: 0, hold: 1 },
-  { id: 'tech', from: 156, to: 170, fx: 1 },
-  { id: 'end', from: 170, to: 180, fx: 1 },
+  { id: 'open',    from: 0,   to: 16,  fx: 1 },
+  { id: 'id',      from: 16,  to: 32,  fx: 1 },
+  { id: 'compare', from: 32,  to: 50,  fx: 1 },
+  { id: 'data',    from: 50,  to: 66,  fx: 1 },
+  { id: 'ui',      from: 66,  to: 98,  fx: 0 },
+  { id: 'tpl',     from: 98,  to: 130, fx: 0 },
+  { id: 'move',    from: 130, to: 160, fx: 0 },
+  { id: 'kf',      from: 160, to: 190, fx: 0, hold: 1 },
+  { id: 'use',     from: 190, to: 206, fx: 1 },
+  { id: 'tech',    from: 206, to: 222, fx: 1 },
+  { id: 'end',     from: 222, to: 240, fx: 1 },
 ];
 const PSUB = [
   [1.0, 6.4, '粘贴一段代码，然后呢？'],
-  [7.0, 11.4, '通常只能截图，或者录屏'],
-  [11.9, 14.0, 'Code Reel 让它自己写出来'],
-  [15.2, 20.4, '整个项目只有一个 index.html'],
-  [21.0, 25.4, '零依赖、零构建、零 CDN'],
-  [26.0, 30.0, '双击打开，就能用'],
-  [31.0, 37.4, '左侧粘贴代码'],
-  [38.0, 45.4, '内置词法分析器自动识别语言，19 种语言语法着色'],
-  [46.0, 54.4, '不依赖 highlight.js，也不需要任何 CDN'],
-  [55.0, 63.6, '中日韩双宽字符按码点定位，光标不会错位'],
-  [65.0, 72.4, '八个模版，一键套用整套外观与动画编排'],
-  [73.0, 81.4, '电影感、快闪、讲义、竖屏、电报、故障感、延时、慢读'],
-  [82.0, 89.4, '每个模版自带一条变速曲线，套完直接能播'],
-  [90.0, 95.6, '模版不会覆盖你已经写好的代码'],
-  [97.0, 104.4, '出现方式 × 镜头运动，两个维度自由组合'],
-  [105.0, 113.4, '打字机、逐词、逐行、语法块'],
-  [114.0, 122.4, '静止、推近、拉远、环绕、倾斜、横移'],
-  [123.0, 125.8, '取笛卡尔积，串成一条播放序列'],
-  [127.0, 134.4, '舞台下方是七通道关键帧编辑器'],
-  [135.0, 143.4, '速度、缩放、水平与垂直旋转，横移 X / 升降 Y / 推移 Z'],
-  [145.0, 151.4, '把画面拖到满意的角度松手，这一刻就固化成关键帧'],
-  [152.0, 155.6, '横移单位是相对画面的百分比，任何画幅观感一致'],
-  [157.0, 162.4, '离屏 Canvas 按设备像素绘制，WebGL 做真透视贴图'],
-  [163.0, 166.4, '旋转时没有拼接接缝，每一帧都是时间的纯函数'],
-  [167.0, 169.6, '拖进度条、导出、实时播放，三者逐帧一致'],
-  [171.0, 176.4, '开源 · MIT 协议'],
-  [177.0, 180.0, 'github.com/xkx121029/code-reel'],
+  [7.0, 11.6, '通常只能截图，或者录屏'],
+  [12.2, 16.0, 'Code Reel 让它自己写出来'],
+  [16.8, 22.0, '整个项目只有一个 index.html'],
+  [22.6, 27.2, '零依赖、零构建、零 CDN'],
+  [27.8, 32.0, '双击打开，就能用'],
+  [33.0, 38.6, '以前：截图、录屏、剪辑软件，来回切'],
+  [39.2, 44.6, '现在：粘代码、挑模版、导出，一步到底'],
+  [45.2, 50.0, '不用装环境，不用登录，不联网'],
+  [51.0, 56.6, '19 种语言，自研词法分析器自动识别'],
+  [57.2, 61.6, '8 个模版、5 套配色、3 种画幅'],
+  [62.2, 66.0, '7 条关键帧通道，全塞进一个文件'],
+  [67.0, 73.4, '左侧粘贴代码，语言自动识别'],
+  [74.0, 81.4, '19 种语言语法着色，不依赖 highlight.js'],
+  [82.0, 89.4, '中日韩双宽字符按码点定位，光标不会错位'],
+  [90.0, 98.0, '行号、窗口边框、投影，都可以开关'],
+  [99.0, 106.4, '八个模版，一键套用整套外观与动画编排'],
+  [107.0, 115.4, '电影感、快闪、讲义、竖屏、电报、故障感、延时、慢读'],
+  [116.0, 123.4, '每个模版自带一条变速曲线，套完直接能播'],
+  [124.0, 130.0, '模版不会覆盖你已经写好的代码'],
+  [131.0, 138.4, '出现方式 × 镜头运动，两个维度自由组合'],
+  [139.0, 147.4, '打字机、逐词、逐行、语法块'],
+  [148.0, 156.4, '静止、推近、拉远、环绕、倾斜、横移'],
+  [157.0, 160.0, '取笛卡尔积，串成一条播放序列'],
+  [161.0, 168.4, '舞台下方是七通道关键帧编辑器'],
+  [169.0, 177.4, '速度、缩放、水平与垂直旋转，横移 X / 升降 Y / 推移 Z'],
+  [178.0, 185.4, '把画面拖到满意的角度松手，这一刻就固化成关键帧'],
+  [186.0, 190.0, '横移单位是相对画面的百分比，任何画幅观感一致'],
+  [191.0, 196.6, '教学视频、技术分享、短视频封面、文档配图'],
+  [197.2, 202.6, '凡是需要「让代码动起来」的地方'],
+  [203.2, 206.0, '都能用'],
+  [207.0, 212.6, '离屏 Canvas 按设备像素绘制，WebGL 做真透视贴图'],
+  [213.2, 217.6, '旋转时没有拼接接缝，每一帧都是时间的纯函数'],
+  [218.2, 222.0, '拖进度条、导出、实时播放，三者逐帧一致'],
+  [223.0, 229.6, '开源 · MIT 协议'],
+  [230.2, 235.6, 'github.com/xkx121029/code-reel'],
+  [236.2, 240.0, '单文件 · 零依赖 · 零构建'],
 ];
 function pSceneAt(t) {
   for (const s of PSC) if (t >= s.from && t < s.to) return s;
@@ -3973,15 +3988,24 @@ function pClick() {
   void r.offsetWidth;
   r.classList.add('on');
 }
-/* 节拍表：一条时间轴串起「改状态 / 指哪里 / 点亮哪里 / 额外动作」 */
+/* 节拍表：一条时间轴串起「改状态 / 指哪里 / 点亮哪里 / 额外动作」
+   被直接跳到某一刻时（静帧校对、拖动宣传片进度条），必须把这一刻之前
+   的节拍按顺序补放一遍 —— 关键帧那一场只有首拍带 cue，只放当前拍的话
+   状态会停在上一场。补放是幂等的：pCue 自己按 JSON 记忆化，apply 重放
+   也只是把同一份选择再写一次。 */
 function pBeats(list, t) {
-  let b = list[0];
-  for (const x of list) if (t >= x.t) b = x;
+  let idx = 0;
+  for (let i = 0; i < list.length; i++) if (t >= list[i].t) idx = i;
+  const b = list[idx];
+  const from = PROMO.beat ? list.indexOf(PROMO.beat) : -1;
+  for (let i = from + 1; i <= idx; i++) {
+    const x = list[i];
+    if (x.cue) pCue(x.cue);
+    if (x.apply) x.apply();
+  }
   if (PROMO.beat !== b) {
     PROMO.beat = b;
-    if (b.cue) pCue(b.cue);
-    if (b.apply) b.apply();
-    if (b.click) setTimeout(pClick, 480);
+    if (b.click) setTimeout(pClick, 480);   /* 补放时不补点击涟漪，只补状态 */
   }
   pHl(b.hl && PHL[b.hl] ? PHL[b.hl]() : null);
   PROMO.focus = b.focus ? document.querySelector(b.focus) : null;
@@ -3993,19 +4017,19 @@ const UI3_BASE = { theme: 'graphite', ratio: 16 / 9, reveal: ['type'], move: ['p
                    fontSize: 15, speed: 2.0, gutter: true, chrome: true, shadow: true,
                    follow: false, autoCam: false, tpl: 'cinema', auto: true, mode: 'auto' };
 const UI3 = [
-  { t: 30.0, cue: pmerge(UI3_BASE, { code: '', move: ['still'], speed: 1.1, tpl: null }),
+  { t: 66.0, cue: pmerge(UI3_BASE, { code: '', move: ['still'], speed: 1.1, tpl: null }),
     hl: 'code', focus: null },
-  { t: 31.6, cue: pmerge(UI3_BASE, { code: SAMPLES.javascript }), hl: 'code', focus: '#code', click: 1 },
-  { t: 38.2, cue: pmerge(UI3_BASE, { code: SAMPLES.python }), hl: 'lang', focus: '#langBadge', click: 1 },
-  { t: 40.9, cue: pmerge(UI3_BASE, { code: SAMPLES.go }), hl: 'lang', focus: '#langBadge', click: 1 },
-  { t: 43.4, cue: pmerge(UI3_BASE, { code: SAMPLES.cpp }), hl: 'lang', focus: '#langBadge', click: 1 },
-  { t: 46.0, cue: pmerge(UI3_BASE, { code: SAMPLES.rust, speed: 2.4 }), hl: 'code', focus: '#code' },
-  { t: 55.0, cue: pmerge(UI3_BASE, { code: SAMPLES.javascript, speed: 1.6, tpl: null }),
+  { t: 67.6, cue: pmerge(UI3_BASE, { code: SAMPLES.javascript }), hl: 'code', focus: '#code', click: 1 },
+  { t: 74.2, cue: pmerge(UI3_BASE, { code: SAMPLES.python }), hl: 'lang', focus: '#langBadge', click: 1 },
+  { t: 76.9, cue: pmerge(UI3_BASE, { code: SAMPLES.go }), hl: 'lang', focus: '#langBadge', click: 1 },
+  { t: 79.4, cue: pmerge(UI3_BASE, { code: SAMPLES.cpp }), hl: 'lang', focus: '#langBadge', click: 1 },
+  { t: 82.0, cue: pmerge(UI3_BASE, { code: SAMPLES.rust, speed: 2.4 }), hl: 'code', focus: '#code' },
+  { t: 91.0, cue: pmerge(UI3_BASE, { code: SAMPLES.javascript, speed: 1.6, tpl: null }),
     hl: 'code', focus: '#code' },
 ];
 
 /* S4 · 模版巡礼：直接调真实的 applyTemplate，连 toast 都是真的 */
-const TPL_AT = TEMPLATES.map((T, i) => 65.0 + i * 3.85);
+const TPL_AT = TEMPLATES.map((T, i) => 99.0 + i * 3.85);
 function scTpl(p, t) {
   let i = 0;
   for (let k = 0; k < TPL_AT.length; k++) if (t >= TPL_AT[k]) i = k;
@@ -4031,17 +4055,17 @@ function scTpl(p, t) {
 const UI5_BASE = { code: SAMPLES.javascript, theme: 'graphite', ratio: 16 / 9, fontSize: 15,
                    speed: 2.2, gutter: true, chrome: true, shadow: true, follow: false,
                    autoCam: false, tpl: 'cinema', auto: true, mode: 'auto' };
-const UI5 = [{ t: 97.0, cue: pmerge(UI5_BASE, { reveal: ['type'], move: ['still'] }),
+const UI5 = [{ t: 131.0, cue: pmerge(UI5_BASE, { reveal: ['type'], move: ['still'] }),
                hl: 'reveal', focus: '#revealChips' }];
 ['type', 'word', 'line', 'block'].forEach((id, i) => UI5.push({
-  t: 105.0 + i * 2.1, cue: pmerge(UI5_BASE, { reveal: [id], move: ['still'] }),
+  t: 139.0 + i * 2.1, cue: pmerge(UI5_BASE, { reveal: [id], move: ['still'] }),
   hl: 'reveal', focus: '#revealChips', click: 1,
 }));
 ['still', 'push', 'pull', 'orbit', 'tilt', 'pan'].forEach((id, i) => UI5.push({
-  t: 114.0 + i * 1.5, cue: pmerge(UI5_BASE, { reveal: ['type'], move: [id] }),
+  t: 148.0 + i * 1.5, cue: pmerge(UI5_BASE, { reveal: ['type'], move: [id] }),
   hl: 'move', focus: '#moveChips', click: 1,
 }));
-UI5.push({ t: 123.0, cue: pmerge(UI5_BASE, { reveal: ['type', 'word'], move: ['push', 'orbit'] }),
+UI5.push({ t: 157.0, cue: pmerge(UI5_BASE, { reveal: ['type', 'word'], move: ['push', 'orbit'] }),
            hl: 'timeline', focus: '.tl-svg' });
 
 /* S6 · 关键帧编辑器 */
@@ -4057,10 +4081,10 @@ const KF6 = {
 const KF6_BASE = { code: SAMPLES.javascript, theme: 'graphite', ratio: 16 / 9, reveal: ['type'],
                    move: ['still'], fontSize: 15, speed: 1.6, gutter: true, chrome: true,
                    shadow: true, follow: false, autoCam: false, tpl: null, auto: false };
-const UI6 = [{ t: 127.0, cue: pmerge(KF6_BASE, { kf: KF6 }), hl: 'timeline', focus: '.tl-svg' }];
+const UI6 = [{ t: 161.0, cue: pmerge(KF6_BASE, { kf: KF6 }), hl: 'timeline', focus: '.tl-svg' }];
 [['speed', 4.5], ['zoom', 6], ['rotY', 6], ['rotX', 5], ['panX', 7], ['panY', 8], ['panZ', 9]]
   .forEach((c, i) => UI6.push({
-    t: 135.0 + i * 1.4, hl: 'kf', focus: '#kfCh',
+    t: 169.0 + i * 1.4, hl: 'kf', focus: '#kfCh',
     apply: () => {
       const arr = S.kf[c[0]] || [];
       let k = arr[0];
@@ -4070,24 +4094,27 @@ const UI6 = [{ t: 127.0, cue: pmerge(KF6_BASE, { kf: KF6 }), hl: 'timeline', foc
       tl.dirty = true;
     },
   }));
-UI6.push({ t: 145.0, hl: 'stage', focus: '.stage-wrap',
-           apply: () => { tl.sel = null; syncKfUI(); PROMO.dragged = false; } });
-UI6.push({ t: 152.0, cue: pmerge(KF6_BASE, { ratio: 9 / 16 }), hl: 'ratio', focus: '#ratioSeg' });
-UI6.push({ t: 154.0, cue: pmerge(KF6_BASE, { ratio: 1 / 1 }), hl: 'ratio', focus: '#ratioSeg' });
+UI6.push({ t: 179.0, hl: 'stage', focus: '.stage-wrap',
+           apply: () => { tl.sel = null; syncKfUI(); } });
+UI6.push({ t: 186.0, cue: pmerge(KF6_BASE, { ratio: 9 / 16 }), hl: 'ratio', focus: '#ratioSeg' });
+UI6.push({ t: 188.0, cue: pmerge(KF6_BASE, { ratio: 1 / 1 }), hl: 'ratio', focus: '#ratioSeg' });
 
 function scKf(p, t) {
   pBeats(UI6, t);
-  /* 145.0 → 147.6 模拟「抓住画面拖角度」，松手那一刻由真实的 bakeDrag 固化成关键帧 */
-  if (t >= 145.0 && t < 147.6) {
-    const e = pease(psat((t - 145.0) / 2.4));
+  /* 179.0 → 181.6 模拟「抓住画面拖角度」，松手那一刻由真实的 bakeDrag 固化成关键帧。
+     固化只看时间有没有跨过 181.6，落点直接取片段末尾（这一场是 hold，播放头就钉在末尾），
+     不用 player.t —— 跳到后面那一刻时 player.t 还是 0，会把点写到 0 秒去。 */
+  if (t >= 179.0 && t < 181.6) {
+    PROMO.baked = false;
+    const e = pease(psat((t - 179.0) / 2.4));
     view3d.rotY = 15 * DEG * e;
     view3d.panX = -7 * e;
     view3d.panY = 3.5 * e;
     updateViewLabel();
-  } else if (t >= 147.6 && !PROMO.dragged) {
-    PROMO.dragged = true;
-    bakeView(player.t);
-    bakePan(player.t);
+  } else if (t >= 181.6 && !PROMO.baked) {
+    PROMO.baked = true;
+    bakeView(scene.total);
+    bakePan(scene.total);
   }
 }
 
@@ -4225,6 +4252,157 @@ function fxId(p, t) {
   R.update(p);
 }
 
+/* S3 · 对比页：两栏对置，左边旧办法（暗、带删除线），右边 Code Reel（亮） */
+const CMP_L = [
+  ['截 图', '静态，看不出过程'],
+  ['录 屏', '再进剪辑软件切一遍'],
+  ['配 音', '字幕对轴，逐帧挪'],
+];
+const CMP_R = [
+  ['粘 代 码', '语言自动识别'],
+  ['挑 模 版', '外观与编排一次到位'],
+  ['导 出', 'WebM 直接可发'],
+];
+function fxCompare(p, t) {
+  fxBuild('compare', box => {
+    const wrap = pmk('div', null, null);
+    wrap.className = 'fxAbs';
+    box.appendChild(wrap);
+    const head = pmk('div', { left: '200px', top: '176px', fontSize: '31px', fontWeight: '500',
+      letterSpacing: '8px', color: '#e9ebe8' }, null);
+    head.className = 'fxLn'; head.textContent = '让代码动起来，以前要开三个软件';
+    const r0 = pmk('div', { left: '200px', right: '200px', top: '240px' }, null);
+    r0.className = 'fxRule';
+    /* 中缝要用 top+bottom 定高，所以挂 fxLn 而不是 fxRule（后者写死 height:1px） */
+    const mid = pmk('div', { left: '50%', top: '300px', bottom: '240px', width: '1px',
+      background: '#2b2b31', transformOrigin: 'top center' }, null);
+    mid.className = 'fxLn';
+    wrap.appendChild(head); wrap.appendChild(r0); wrap.appendChild(mid);
+    const mk = (css, txt, cls) => { const e = pmk('div', css, null); e.className = cls; e.textContent = txt;
+      wrap.appendChild(e); return e; };
+    const lTag = mk({ left: '200px', top: '308px', fontFamily: 'var(--mono)', fontSize: '17px',
+      letterSpacing: '5px', color: '#63636b' }, 'BEFORE', 'fxLn');
+    const rTag = mk({ left: '1064px', top: '308px', fontFamily: 'var(--mono)', fontSize: '17px',
+      letterSpacing: '5px', color: '#e8663a' }, 'CODE REEL', 'fxLn');
+    const rows = [];
+    CMP_L.forEach((r, i) => {
+      const y = 402 + i * 122;
+      rows.push({ a: mk({ left: '200px', top: y + 'px', fontSize: '32px', fontWeight: '500',
+        letterSpacing: '3px', color: '#71717a' }, r[0], 'fxLn'),
+        b: mk({ left: '200px', top: (y + 52) + 'px', fontSize: '18px', color: '#5c5c66' }, r[1], 'fxLn') });
+    });
+    const rowsR = [];
+    CMP_R.forEach((r, i) => {
+      const y = 402 + i * 122;
+      rowsR.push({ a: mk({ left: '1064px', top: y + 'px', fontSize: '32px', fontWeight: '500',
+        letterSpacing: '3px', color: '#f0f2f0' }, r[0], 'fxLn'),
+        b: mk({ left: '1064px', top: (y + 52) + 'px', fontSize: '18px', color: '#8b8b91' }, r[1], 'fxLn') });
+    });
+    const foot = mk({ left: '200px', top: '842px', fontFamily: 'var(--mono)', fontSize: '26px',
+      letterSpacing: '3px', color: '#8fb8a6' }, '一个 index.html，把这三步合成一步', 'fxLn');
+    const rN = pmk('div', { left: '200px', right: '200px', top: '806px' }, null);
+    rN.className = 'fxRule'; wrap.appendChild(rN);
+    PROMO.fxRef = { head, r0, mid, lTag, rTag, rows, rowsR, foot, rN };
+  });
+  const R = PROMO.fxRef;
+  if (!R) return;
+  fxBg(t, 0.44, 0);
+  const e0 = penter(p, 0.08, 0.55, 34);
+  R.head.style.opacity = e0.a.toFixed(3);
+  R.head.style.transform = 'translateY(' + e0.dy.toFixed(2) + 'px)';
+  R.r0.style.opacity = (penter(p, 0.3, 0.6, 0).a * 0.9).toFixed(3);
+  const e1 = penter(p, 0.5, 0.6, 0);
+  R.lTag.style.opacity = e1.a.toFixed(3);
+  R.rTag.style.opacity = penter(p, 6.8, 0.6, 0).a.toFixed(3);
+  /* 中缝从上往下拉开，拉到「现在」那一列开始入场 */
+  R.mid.style.transform = 'scaleY(' + pease(psat((p - 0.4) / 7.4)).toFixed(3) + ')';
+  R.mid.style.opacity = '0.9';
+  R.rows.forEach((r, i) => {
+    const e = penter(p, 1.6 + i * 1.6, 0.5, 30);
+    [r.a, r.b].forEach(el => {
+      el.style.opacity = e.a.toFixed(3);
+      el.style.transform = 'translateY(' + e.dy.toFixed(2) + 'px)';
+    });
+  });
+  R.rowsR.forEach((r, i) => {
+    const e = penter(p, 7.6 + i * 1.6, 0.5, 30);
+    [r.a, r.b].forEach(el => {
+      el.style.opacity = e.a.toFixed(3);
+      el.style.transform = 'translateY(' + e.dy.toFixed(2) + 'px)';
+    });
+  });
+  R.rN.style.opacity = (penter(p, 13.0, 0.6, 0).a * 0.9).toFixed(3);
+  const eF = penter(p, 13.4, 0.55, 26);
+  R.foot.style.opacity = eF.a.toFixed(3);
+  R.foot.style.transform = 'translateY(' + eF.dy.toFixed(2) + 'px)';
+}
+
+/* S4 · 数据页：四个大数字，入场时从 0 数上去 */
+const DATA_COLS = [
+  ['19', '种语言', '自研词法分析器', '#e8663a'],
+  ['8', '个模版', '外观 + 编排 + 变速曲线', '#8fb8a6'],
+  ['5', '套配色', '含浅色纸与信号橙', '#d9a55e'],
+  ['7', '条通道', '关键帧逐通道可编辑', '#7fb2c9'],
+];
+function fxData(p, t) {
+  fxBuild('data', box => {
+    const wrap = pmk('div', null, null);
+    wrap.className = 'fxAbs';
+    box.appendChild(wrap);
+    const head = pmk('div', { left: '200px', top: '222px', fontSize: '31px', fontWeight: '500',
+      letterSpacing: '8px', color: '#e9ebe8' }, null);
+    head.className = 'fxLn'; head.textContent = '东西不多，但都够用';
+    const r0 = pmk('div', { left: '200px', right: '200px', top: '286px' }, null);
+    r0.className = 'fxRule';
+    wrap.appendChild(head); wrap.appendChild(r0);
+    const cols = DATA_COLS.map((c, i) => {
+      const x = 200 + i * 430;
+      const num = pmk('div', { left: x + 'px', top: '430px', fontFamily: 'var(--mono)',
+        fontSize: '150px', fontWeight: '600', letterSpacing: '4px', color: c[3] }, null);
+      num.className = 'fxLn'; num.textContent = '0';
+      const unit = pmk('div', { left: x + 'px', top: '620px', fontSize: '30px', fontWeight: '500',
+        letterSpacing: '6px', color: '#e9ebe8' }, null);
+      unit.className = 'fxLn'; unit.textContent = c[1];
+      const note = pmk('div', { left: x + 'px', top: '668px', fontSize: '17px',
+        color: '#8b8b91' }, null);
+      note.className = 'fxLn'; note.textContent = c[2];
+      wrap.appendChild(num); wrap.appendChild(unit); wrap.appendChild(note);
+      return { num, unit, note, target: parseInt(c[0], 10), shown: -1 };
+    });
+    const rN = pmk('div', { left: '200px', right: '200px', top: '792px' }, null);
+    rN.className = 'fxRule'; wrap.appendChild(rN);
+    const foot = pmk('div', { left: '200px', top: '828px', fontFamily: 'var(--mono)', fontSize: '26px',
+      letterSpacing: '3px', color: '#8fb8a6' }, null);
+    foot.className = 'fxLn'; foot.textContent = '全部塞进一个 index.html';
+    wrap.appendChild(foot);
+    PROMO.fxRef = { head, r0, cols, rN, foot };
+  });
+  const R = PROMO.fxRef;
+  if (!R) return;
+  fxBg(t, 0.46, 0);
+  const e0 = penter(p, 0.08, 0.55, 34);
+  R.head.style.opacity = e0.a.toFixed(3);
+  R.head.style.transform = 'translateY(' + e0.dy.toFixed(2) + 'px)';
+  R.r0.style.opacity = (penter(p, 0.3, 0.6, 0).a * 0.9).toFixed(3);
+  R.cols.forEach((c, i) => {
+    const at = 1.4 + i * 1.5;
+    const e = penter(p, at, 0.5, 40);
+    [c.unit, c.note].forEach(el => {
+      el.style.opacity = e.a.toFixed(3);
+      el.style.transform = 'translateY(' + e.dy.toFixed(2) + 'px)';
+    });
+    c.num.style.opacity = e.a.toFixed(3);
+    c.num.style.transform = 'translateY(' + e.dy.toFixed(2) + 'px)';
+    /* 数字从 0 数上去，数完就停 */
+    const n = Math.round(c.target * pease(psat((p - at) / 0.85)));
+    if (n !== c.shown) { c.shown = n; c.num.textContent = String(n); }
+  });
+  R.rN.style.opacity = (penter(p, 10.6, 0.6, 0).a * 0.9).toFixed(3);
+  const eF = penter(p, 11.2, 0.55, 26);
+  R.foot.style.opacity = eF.a.toFixed(3);
+  R.foot.style.transform = 'translateY(' + eF.dy.toFixed(2) + 'px)';
+}
+
 /* S7 · 技术特征 */
 const TECH_ROWS = [
   ['01', '自研词法分析器', '19 种语言语法着色，不依赖 highlight.js 与任何 CDN', 'lexer', '#e8663a'],
@@ -4259,7 +4437,41 @@ function fxTech(p, t) {
   R.update(p);
 }
 
-/* S8 · 片尾 */
+/* S8 · 适用场景：谁在用它 */
+const USE_ROWS = [
+  ['A', '教学视频', '把一段算法从静态截图变成逐行推演', 'teaching', '#e8663a'],
+  ['B', '技术分享', '演示文稿里的代码片段，直接贴动图', 'slides', '#8fb8a6'],
+  ['C', '短视频封面', '竖屏 9:16 一把出，不用再裁', 'vertical', '#d9a55e'],
+  ['D', '文档配图', 'README 里嵌一段会自己写出来的代码', 'docs', '#7fb2c9'],
+];
+function fxUse(p, t) {
+  fxBuild('use', box => {
+    const wrap = pmk('div', null, null);
+    wrap.className = 'fxAbs';
+    box.appendChild(wrap);
+    const head = pmk('div', { left: '200px', top: '190px', fontSize: '31px', fontWeight: '500',
+      letterSpacing: '8px', color: '#e9ebe8' }, null);
+    head.className = 'fxLn'; head.textContent = '凡是需要让代码动起来的地方';
+    const r0 = pmk('div', { left: '200px', right: '200px', top: '254px' }, null);
+    r0.className = 'fxRule';
+    const rN = pmk('div', { left: '200px', right: '200px', top: '864px' }, null);
+    rN.className = 'fxRule';
+    wrap.appendChild(head); wrap.appendChild(r0); wrap.appendChild(rN);
+    PROMO.fxRef = { head, r0, rN,
+      update: fxRows(wrap, USE_ROWS, [1.0, 3.6, 6.2, 8.8], 396, 118, (r, i) => USE_ROWS[i][4]) };
+  });
+  const R = PROMO.fxRef;
+  if (!R) return;
+  fxBg(t, 0.42, 0);
+  const e0 = penter(p, 0.08, 0.55, 34);
+  R.head.style.opacity = e0.a.toFixed(3);
+  R.head.style.transform = 'translateY(' + e0.dy.toFixed(2) + 'px)';
+  R.r0.style.opacity = (penter(p, 0.3, 0.6, 0).a * 0.9).toFixed(3);
+  R.rN.style.opacity = (penter(p, 11.0, 0.6, 0).a * 0.9).toFixed(3);
+  R.update(p);
+}
+
+/* S9 · 片尾 */
 function fxEnd(p, t) {
   fxBuild('end', box => {
     const wrap = pmk('div', null, null);
@@ -4279,12 +4491,15 @@ function fxEnd(p, t) {
       letterSpacing: '1px', color: '#8fb8a6' }, 'gitee.com/xkx1029/code-reel');
     const tag = mk({ left: '200px', top: '808px', fontSize: '21px', letterSpacing: '4px',
       color: '#63636b' }, '单文件 · 零依赖 · 零构建 · 双击即用');
-    PROMO.fxRef = { title, rule, lic, gh, ge, tag };
+    const ask = mk({ left: '200px', top: '900px', fontSize: '23px', letterSpacing: '3px',
+      color: '#e8663a' }, '如果它省了你一次录屏，点个 Star');
+    PROMO.fxRef = { title, rule, lic, gh, ge, tag, ask };
   });
   const R = PROMO.fxRef;
   if (!R) return;
   fxBg(t, 0.5, 0);
-  const items = [[R.title, 0.1, 46], [R.lic, 0.5, 26], [R.gh, 1.2, 22], [R.ge, 2.2, 22], [R.tag, 5.0, 22]];
+  const items = [[R.title, 0.1, 46], [R.lic, 0.5, 26], [R.gh, 1.2, 22], [R.ge, 2.2, 22],
+    [R.tag, 5.0, 22], [R.ask, 12.4, 24]];
   items.forEach(it => {
     const e = penter(p, it[1], 0.55, it[2]);
     it[0].style.opacity = e.a.toFixed(3);
@@ -4297,6 +4512,9 @@ function pDrawFx(sc, p, t) {
   if (!sc) return;
   if (sc.id === 'open') fxOpen(p, t);
   else if (sc.id === 'id') fxId(p, t);
+  else if (sc.id === 'compare') fxCompare(p, t);
+  else if (sc.id === 'data') fxData(p, t);
+  else if (sc.id === 'use') fxUse(p, t);
   else if (sc.id === 'tech') fxTech(p, t);
   else if (sc.id === 'end') fxEnd(p, t);
 }
@@ -4403,12 +4621,13 @@ PROMO.boot = function () {
   bar.innerHTML =
     '<button class="btn btn-primary" id="pmPlay">暂停</button>'
     + '<button class="btn" id="pmRestart">重播</button>'
-    + '<input type="range" id="pmScrub" min="0" max="1800" step="1" value="0">'
-    + '<span class="time" id="pmTime"><b>0.0</b> / 180.0 s</span>'
+    + '<input type="range" id="pmScrub" min="0" max="' + PROMO_TOTAL * 10 + '" step="1" value="0">'
+    + '<span class="time" id="pmTime"><b>0.0</b> / ' + PROMO_TOTAL + '.0 s</span>'
     + '<button class="btn" id="pmFull">全屏</button>'
     + '<button class="btn" id="pmRec">开始录制</button>'
     + '<button class="btn" id="pmHide">隐藏控件（H）</button>'
-    + '<span class="pnote">录制：点「开始录制」→ 选「此标签页」→ 自动录满 180 秒并下载 WebM</span>';
+    + '<span class="pnote">录制：点「开始录制」→ 选「此标签页」→ 自动录满 '
+    + PROMO_TOTAL + ' 秒并下载 WebM</span>';
   frame.appendChild(fx); frame.appendChild(sub); frame.appendChild(rip);
   frame.appendChild(cur); frame.appendChild(bar);
   root.appendChild(frame);
