@@ -200,7 +200,9 @@ input[type=range]{flex:1;accent-color:var(--accent);height:18px;cursor:pointer}
 /* ---------- 舞台 ---------- */
 .stage-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;padding:18px}
 .stage-inner{position:relative;display:flex;align-items:center;justify-content:center;width:100%;height:100%}
-canvas{display:block;border-radius:12px;background:#0a0a0b;cursor:grab;touch-action:none}
+/* touch-action:none 挡住触摸手势，user-select / user-drag 挡住拖动时把画布当成
+   可选文本或可拖拽内容 —— 否则拖动会被浏览器接过去变成原生选择或原生拖拽 */
+canvas{display:block;border-radius:12px;background:#0a0a0b;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
 canvas.dragging{cursor:grabbing}
 
 .playbar{
@@ -3477,6 +3479,10 @@ function bindView3D() {
   cv.addEventListener("pointerdown", e => {
     const pan = e.button === 2;                  /* 右键 = 平移相机坐标 */
     if (e.pointerType === "mouse" && e.button !== 0 && !pan) return;
+    /* 右键按下就把默认行为吞掉：浏览器的右键菜单与右键手势都是从这一次默认行为起手的，
+       不 preventDefault 的话拖到一半会被浏览器抢走（随后只剩一个 pointercancel，位移全丢）。
+       只吞右键 —— 左键吞了会连带掐掉兼容鼠标事件，双击复位（dblclick）就没了。 */
+    if (pan) e.preventDefault();
     viewTween = null;
     /* 落点先定下来：已有选点就写那儿，否则以当前时刻为落点。
        同时暂停播放 —— 画面不再漂，落点、预告线、看到的画面三者才一致。 */
@@ -3532,6 +3538,11 @@ function bindView3D() {
   cv.addEventListener("dblclick", resetView3D);
   /* 右键用来拖平移，所以画布上不再弹右键菜单 */
   cv.addEventListener("contextmenu", e => e.preventDefault());
+  /* 拖到画布外再松手时，菜单会挂在鼠标底下那个元素上（pointer capture 管不到
+     contextmenu 的重定向），所以在整个文档范围内压住：只要还在拖就不许弹 */
+  document.addEventListener("contextmenu", e => { if (drag) e.preventDefault(); });
+  /* 画布本身不许被当成可拖拽内容，否则拖动会变成浏览器原生的拖拽 */
+  cv.addEventListener("dragstart", e => e.preventDefault());
   $("#btnResetView").addEventListener("click", resetView3D);
 }
 
