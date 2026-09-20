@@ -333,7 +333,7 @@ canvas.dragging{cursor:grabbing}
         <input type="range" id="fontSize" min="11" max="24" value="15" step="1">
         <span class="val" id="fontVal">15</span>
       </div>
-      <p class="note" style="margin:9px 0 0">基础速度决定每段代码写多久；快慢节奏与镜头缩放、旋转请在舞台下方的<b>关键帧时间轴</b>里调。</p>
+      <p class="note" style="margin:9px 0 0">基础速度决定每段代码写多久；快慢节奏与镜头缩放、旋转、横移请在舞台下方的<b>关键帧时间轴</b>里调。</p>
     </div>
 
     <div class="sec">
@@ -1141,6 +1141,7 @@ const MOVE = [
   { id: 'pull', label: '拉远', hint: '缓收' },
   { id: 'orbit', label: '环绕', hint: '空间旋转' },
   { id: 'tilt', label: '倾斜', hint: '斜切入正' },
+  { id: 'pan', label: '横移', hint: '左右平移' },
 ];
 
 /* ---------------- 6. 全局状态 ---------------- */
@@ -1159,7 +1160,7 @@ const S = {
   follow: false,         // 随光标跟随：镜头横移，把光标钉在左起 1/3 处
   autoCam: false,        // 自动运镜（3D 缓慢漂移）
   /* 关键帧：按通道分开，键为 { t: 全局时间轴秒数, v: 数值 }，t 升序 */
-  kf: { speed: [], zoom: [], rotX: [], rotY: [] },
+  kf: kfEmpty(),
   auto: true,            // 自动编排是否生效（点「清空」会停下，点「重新编排」恢复）
   tpl: null,             // 套用过的模版 id（决定自动编排里用哪条变速曲线）
   snap: true,            // 关键帧拖动/选点/定位是否吸附
@@ -1174,7 +1175,20 @@ const CH = [
   /* 旋转只给基准显示范围，实际范围随数据自动外扩（见 chSpan），硬上限是 ROT_MAX */
   { id: 'rotY', label: '水平旋转', min: -40, max: 40, log: false, def: 0, auto: true, unit: '°', step: 1, fmt: v => v.toFixed(1) + '°' },
   { id: 'rotX', label: '垂直旋转', min: -40, max: 40, log: false, def: 0, auto: true, unit: '°', step: 1, fmt: v => v.toFixed(1) + '°' },
+  /* 横移三轴：镜头在空间里平移（不是旋转），单位是相对画面的百分比 ——
+     X 相对视口宽、Y 相对视口高、Z 相对镜头距离，
+     所以同一套数值在 16:9 / 9:16 / 1:1 与任何分辨率下都是同样的观感。 */
+  { id: 'panX', label: '横移 X', min: -50, max: 50, log: false, def: 0, unit: '%', step: 1, fmt: v => v.toFixed(1) + '%' },
+  { id: 'panY', label: '升降 Y', min: -50, max: 50, log: false, def: 0, unit: '%', step: 1, fmt: v => v.toFixed(1) + '%' },
+  { id: 'panZ', label: '推移 Z', min: -40, max: 40, log: false, def: 0, unit: '%', step: 1, fmt: v => v.toFixed(1) + '%' },
 ];
+/* 空关键帧表：通道清单只有这一处，清空 / 重置都走它，免得新增通道时漏掉某一处 */
+function kfEmpty() {
+  const o = {};
+  for (const c of CH) o[c.id] = [];
+  return o;
+}
+
 const DEG = Math.PI / 180;
 const KF_HIT = 9;             /* 关键帧命中半径（CSS 像素） */
 /* 旋转上限：合成角度（镜头基线 + 临时视角 + 自动运镜）不许越过 ±89°，
@@ -1627,7 +1641,9 @@ function locate(t) {
    通道语义：
      速度  全局速度曲线（0.25~3×）。它在片段打字区间内做「面积归一化」，
            所以变速只重新分配快慢，不改变每段代码的写完时刻；
-     缩放 / 水平旋转 / 垂直旋转  直接接管相机，有该通道关键帧时覆盖 MOVE 预设。 */
+     缩放 / 水平旋转 / 垂直旋转  直接接管相机，有该通道关键帧时覆盖 MOVE 预设；
+     横移 X / 升降 Y / 推移 Z  同样是相机的直接接管通道，单位是相对画面宽高与镜头距离的百分比，
+                             三者都在投影空间里生效，所以任何画幅与分辨率下横移观感一致。 */
 function kfValue(ch, t, fb) {
   const ks = S.kf[ch];
   if (!ks || !ks.length) return fb;
@@ -1706,14 +1722,22 @@ const AUTO_ROT = {
   orbit: { rotY: [15, -6], rotX: [9, 1] },
   tilt:  { rotY: [24, 0],  rotX: [7, 0] },
 };
+/* 横移：段首 → 段末（0.85D），单位是相对画面的百分比。
+   取值与 cameraFor 里 MOVE 预设的「横移」完全一致，所以有关键帧和没关键帧是同一套观感。
+   自动编排只铺 X / Y 两轴：推移 Z 是直接接管深度的通道，一旦有数据就会盖掉
+   「环绕 / 倾斜」预设里那段推进，所以留给用户按需手动打点，不自动铺。 */
+const AUTO_PAN = {
+  pan: { panX: [-12, 12], panY: [2, -2] },
+};
 const AUTO_PULSE = 3.4;      /* 速度脉冲周期（秒）：段越长时间轴上脉冲越多 */
 
 function autoKeys() {
-  const K = { speed: [], zoom: [], rotX: [], rotY: [] };
+  const K = { speed: [], zoom: [], rotX: [], rotY: [], panX: [], panY: [], panZ: [] };
   const total = scene.total;
   if (!(total > 0) || !scene.clips.length) return K;
 
   const spatial = scene.clips.some(c => AUTO_ROT[c.move.id]);
+  const panning = scene.clips.some(c => AUTO_PAN[c.move.id]);
   for (const c of scene.clips) {
     /* 速度：段内按脉冲周期交替「冲刺—放缓」，段首略慢、段尾收住 */
     const sk = AUTO_SPEED[c.reveal.id] || AUTO_SPEED.type;
@@ -1730,6 +1754,14 @@ function autoKeys() {
       const r = AUTO_ROT[c.move.id];
       for (const ch of ['rotY', 'rotX']) {
         const v = r ? r[ch] : [0, 0];
+        K[ch].push({ t: c.t0, v: v[0] }, { t: c.t0 + c.D * 0.85, v: v[1] });
+      }
+    }
+    /* 横移：有横移段时 X / Y 一起接管，其余段给归位锚点（0），段间插值即一次连续平移 */
+    if (panning) {
+      const g = AUTO_PAN[c.move.id];
+      for (const ch of ['panX', 'panY']) {
+        const v = (g && g[ch]) || [0, 0];
         K[ch].push({ t: c.t0, v: v[0] }, { t: c.t0 + c.D * 0.85, v: v[1] });
       }
     }
@@ -1843,12 +1875,13 @@ function bakeView(fallbackT, axes) {
 }
 
 /* ---------------- 8.2 时间轴面板 ----------------
-   舞台下方横幅：顶部时间标尺 + 片段条（出现方式 · 镜头运动）+ 四条通道轨道。
+   舞台下方横幅：顶部时间标尺 + 片段条（出现方式 · 镜头运动）+ 各通道轨道
+   （速度 / 缩放 / 旋转两轴 / 横移三轴）。
    viewBox 与实测宽度同步，所以 SVG 内部坐标 === CSS 像素，
    指针位置可以直接当作时间轴坐标用，不需要任何换算。 */
 const tl = {
   svg: null, W: 0, H: 0, dirty: true,
-  gutter: 54, right: 10, rulerH: 16, clipH: 14, trackH: 26,
+  gutter: 54, right: 10, rulerH: 16, clipH: 14, trackH: 22,
   head: null, headMark: null, drag: null,
   sel: null,          /* 选点：{ t, ch, k } —— 拖动画布视角就写到这个时刻 */
   snapT: null, snapV: null, snapCh: null,   /* 吸附中的参考线（跨帧保留，松手即清） */
@@ -2236,7 +2269,7 @@ function bindTimeline() {
     drawTimeline();
   });
 
-  /* 重新编排：按当前片段重铺四通道（自己碰过的点保留） */
+  /* 重新编排：按当前片段重铺各通道（自己碰过的点保留） */
   $("#btnKfAuto").addEventListener("click", () => {
     S.auto = true;
     applyAuto();
@@ -2247,7 +2280,7 @@ function bindTimeline() {
 
   /* 清空：连自动编排一起停下，避免下次改代码又被塞回来 */
   $("#btnKfClear").addEventListener("click", () => {
-    S.kf = { speed: [], zoom: [], rotX: [], rotY: [] };
+    S.kf = kfEmpty();
     S.auto = false;
     S.tpl = null;
     tl.sel = null;
@@ -2485,7 +2518,7 @@ function emptyTemplate() {
   S.shadow = true;
   S.follow = false;
   S.autoCam = false;
-  S.kf = { speed: [], zoom: [], rotX: [], rotY: [] };
+  S.kf = kfEmpty();
   S.auto = false;                      /* 空模版从零开始，不自动铺关键帧 */
   S.tpl = null;
   tl.sel = null;
@@ -2627,6 +2660,7 @@ function cameraFor(clip, te, tAbs) {
   const ds = scene.depthScale || 1;
 
   let rotX = 0, rotY = 0, rotZ = 0, scale = base, z = 0;
+  let x = 0, y = 0;              /* 镜头平移（投影空间像素）：X 左右、Y 上下 */
 
   if (mode === 'still') {
     scale = base * (1.03 - 0.03 * enter) * (1 - 0.02 * settle);
@@ -2653,6 +2687,16 @@ function cameraFor(clip, te, tAbs) {
     rotZ = lerp(0.035, 0, e);
     scale = base * lerp(0.94, 1.0, e);
     z = lerp(-120, 0, e) * ds;
+  } else if (mode === 'pan') {
+    /* 横移：镜头沿 X 轴平移（视口宽的 ±12%），同步一点轻微升降；
+       取值与 AUTO_PAN 完全一致，所以有没有关键帧都是同一套观感。
+       段尾随 settle 收回居中，避免整段代码停在偏出画面的位置。 */
+    const e = easeInOutCubic(clamp(p * 1.12, 0, 1));
+    const hold = 1 - settle * 0.9;
+    x = lerp(-0.12, 0.12, e) * view.w * hold;
+    y = lerp(0.02, -0.02, e) * view.h * hold;
+    rotY = lerp(-0.06, 0.05, e);      /* 极轻的侧转，免得整幅像贴纸一样滑动 */
+    scale = base * lerp(1.02, 1.0, e);
   }
 
   /* 收尾时拉远到整幅可见（跟随模式下平面宽于视口，收尾要能把整段代码交代清楚） */
@@ -2669,14 +2713,22 @@ function cameraFor(clip, te, tAbs) {
   /* 跟随：光标横向钉在左起 1/3、纵向居中；轨迹已由 followCam 连续化平滑，
      安全区也在建路径时按最小缩放收好了，这里只需乘上当前缩放。
      两步都是时间的纯函数，因此拖动进度条 / 导出视频与实时播放完全一致 */
-  let x = 0, y = 0;
   if (S.follow) {
     const fp = followCam(clip, te);
     if (scene.scrollX) x = fp.x * scale * (1 - settle);
     if (scene.scroll) y = -fp.y * scale * (1 - settle) * (mode === 'orbit' ? 0.6 : 1);
   }
 
-  return { rotX, rotY, rotZ, scale, x, y, z, persp: ds * 1500 };
+  /* 横移三轴接管：与旋转/缩放同一套规则，有关键帧时整条通道由关键帧决定，
+     所以会盖掉 MOVE 预设与跟随给出的位移（先摆好镜头再横移，语义不叠加）。
+     值域是百分比：X 换算成视口宽、Y 换算成视口高、Z 换算成镜头距离，
+     三者都在投影空间里与缩放/旋转同量纲，因此横移量在任何画幅下观感一致。 */
+  const persp = ds * 1500;
+  if (S.kf.panX.length) x = kfValue('panX', tAbs, 0) / 100 * view.w;
+  if (S.kf.panY.length) y = kfValue('panY', tAbs, 0) / 100 * view.h;
+  if (S.kf.panZ.length) z = kfValue('panZ', tAbs, 0) / 100 * persp;
+
+  return { rotX, rotY, rotZ, scale, x, y, z, persp };
 }
 
 /* 自动运镜：缓慢的 3D 漂移（多周期不同步，避免看出循环） */
