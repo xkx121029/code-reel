@@ -242,6 +242,89 @@ canvas.dragging{cursor:grabbing}
   .stage-wrap{height:auto;min-height:280px}
   .stage-inner{height:auto}
 }
+
+/* ---------- 宣传片模式（index.html?promo=1） ----------
+   界面本身一行不改：把真实的 header / main / toast 装进一个固定 1920×1080 的
+   画幅里整体等比缩放，宣传片只额外叠「纯排版画面 + 中文字幕 + 模拟光标」三层。
+   因为 DOM 界面没法被 canvas 录制，导出改走系统录屏（getDisplayMedia）。 */
+body.promo{overflow:hidden;height:100%}
+#promoRoot{position:fixed;inset:0;z-index:900;background:#000;overflow:hidden;
+  display:flex;align-items:center;justify-content:center}
+#promoFrame{position:relative;flex:0 0 auto;width:1920px;height:1080px;overflow:hidden;
+  display:flex;flex-direction:column;background:var(--bg);transform-origin:center center}
+/* 窄窗口下的响应式断点要压掉：宣传片永远是 1920×1080 的三栏版式 */
+#promoFrame > header{flex:0 0 54px;height:54px}
+#promoFrame > main{flex:1;min-height:0;display:grid;grid-template-columns:340px minmax(320px,1fr) 306px}
+#promoFrame .col + .col{border-left:1px solid var(--line);border-top:0}
+#promoFrame .col-stage{height:auto;overflow:hidden}
+#promoFrame .stage-wrap{flex:1;height:auto;min-height:0}
+#promoFrame .stage-inner{height:100%}
+#promoFrame .toast{position:absolute;bottom:152px}
+
+/* 叠层 1：纯排版画面（片头 / 身份 / 技术 / 片尾） */
+#promoFx{position:absolute;inset:0;z-index:20;overflow:hidden;pointer-events:none;
+  opacity:0;visibility:hidden;
+  background:radial-gradient(118% 86% at 50% 44%,#15181d 0%,#0c0e11 58%,#07080a 100%)}
+/* 网格地板：绕底边做弱透视（透视距离给得很大，避免远端被拉爆到画面外），
+   掩膜在元素自身的坐标里做，所以「远端淡出」对应的是元素顶部。 */
+#fxGrid{position:absolute;left:-40%;right:-40%;top:-34%;bottom:-34%;
+  background-image:
+    repeating-linear-gradient(90deg,rgba(122,146,168,.19) 0 1px,transparent 1px 88px),
+    repeating-linear-gradient(0deg,rgba(122,146,168,.19) 0 1px,transparent 1px 88px);
+  transform-origin:50% 100%;
+  -webkit-mask-image:linear-gradient(to bottom,transparent 4%,rgba(0,0,0,.9) 40%,rgba(0,0,0,.72) 100%);
+  mask-image:linear-gradient(to bottom,transparent 4%,rgba(0,0,0,.9) 40%,rgba(0,0,0,.72) 100%)}
+#fxBody{position:absolute;inset:0;display:flex;align-items:center;justify-content:center}
+.cw{position:relative;border-radius:16px;overflow:hidden;background:#12141a;
+  border:1px solid rgba(255,255,255,.10);transform-origin:50% 50%;will-change:transform,opacity;
+  box-shadow:0 46px 110px rgba(0,0,0,.66),0 0 0 1px rgba(0,0,0,.5)}
+.cw-bar{display:flex;align-items:center;gap:9px;height:50px;padding:0 18px;background:#171a21;
+  border-bottom:1px solid rgba(255,255,255,.07)}
+.cw-bar i{width:12px;height:12px;border-radius:50%;background:#3b414d}
+.cw-bar span{margin-left:12px;font-family:var(--mono);font-size:14px;color:#6e7686;letter-spacing:.07em}
+.cw-body{margin:0;padding:22px 28px;font-family:var(--mono);font-size:20px;line-height:1.62;
+  white-space:pre;color:#c9d1d9}
+.cw-body .ch{opacity:0}
+.cw-caret{position:absolute;width:2px;height:32px;background:var(--accent);border-radius:1px;opacity:0}
+.fxAbs{position:absolute;inset:0}
+.fxLn{position:absolute;white-space:nowrap;will-change:transform,opacity}
+.fxRule{position:absolute;height:1px;background:#2b2b31;transform-origin:left center;will-change:transform,opacity}
+
+/* 叠层 2：中文字幕（烧录进画面） */
+#promoSub{position:absolute;left:0;right:0;bottom:0;height:136px;z-index:40;pointer-events:none;
+  display:flex;align-items:center;justify-content:center;opacity:0;
+  background:linear-gradient(to top,rgba(0,0,0,.82),rgba(0,0,0,.50) 52%,rgba(0,0,0,0))}
+#promoSub span{font-size:35px;font-weight:500;letter-spacing:.045em;color:#fff;padding:0 60px;
+  text-align:center;text-shadow:0 2px 18px rgba(0,0,0,.92)}
+
+/* 叠层 3：模拟光标 */
+#promoCursor{position:absolute;left:0;top:0;z-index:50;width:26px;height:26px;margin:-13px 0 0 -13px;
+  pointer-events:none;opacity:0;will-change:transform}
+#promoCursor:before{content:"";position:absolute;inset:0;border-radius:50%;
+  border:2px solid rgba(255,255,255,.92);
+  box-shadow:0 0 0 5px rgba(232,102,58,.22),0 3px 12px rgba(0,0,0,.7)}
+#promoCursor:after{content:"";position:absolute;left:50%;top:50%;width:6px;height:6px;
+  margin:-3px 0 0 -3px;border-radius:50%;background:#fff}
+#promoRipple{position:absolute;z-index:49;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;
+  border:2px solid rgba(232,102,58,.95);opacity:0;pointer-events:none}
+#promoRipple.on{animation:pmRip .5s ease-out}
+@keyframes pmRip{0%{opacity:.95;transform:scale(.6)}100%{opacity:0;transform:scale(6)}}
+
+/* 界面元素高亮环：宣传片指哪打哪，元素本身不动。
+   注意 textarea 这类替换元素画不出伪元素，所以指代码区时挂在外层 .sec 上。 */
+.pmhl{position:relative}
+.pmhl:after{content:"";position:absolute;inset:-5px;border:1.5px solid var(--accent);
+  border-radius:inherit;pointer-events:none;box-shadow:0 0 0 4px rgba(232,102,58,.12)}
+#tplChips.pmhl:after,#revealChips.pmhl:after,#moveChips.pmhl:after{border-radius:12px}
+
+/* 控制条（录制前按 H 隐藏） */
+#promoBar{position:absolute;left:0;right:0;bottom:0;z-index:70;display:flex;align-items:center;gap:12px;
+  padding:10px 16px;background:rgba(8,9,11,.94);border-top:1px solid var(--line);
+  font-family:var(--mono);font-size:11px;color:var(--dim)}
+#promoBar.hide{display:none}
+#promoBar input[type=range]{flex:1;max-width:none}
+#promoBar .btn{padding:4px 11px;font-size:11px;flex:0 0 auto}
+#promoBar .pnote{color:var(--dim-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 </style>
 </head>
 <body>
@@ -3341,7 +3424,10 @@ function loop(now) {
   const dt = Math.min(0.05, (now - player.last) / 1000);
   player.last = now;
   stepViewTween(now);
-  if (player.playing) {
+  if (PROMO.on) {
+    /* 宣传片模式：整条 180 秒时间轴由 PROMO 驱动，它自己去写 player.t */
+    PROMO.tick(dt);
+  } else if (player.playing) {
     player.t += dt;
     if (player.t >= scene.total) { player.t = scene.total; player.playing = false; updatePlayIcon(); }
   }
@@ -3646,14 +3732,17 @@ function bindUI() {
   bindView3D();
 
   document.addEventListener("keydown", e => {
+    if (PROMO.on) return;              /* 宣传片模式自有一套快捷键 */
     if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
     if (e.code === 'Space') { e.preventDefault(); $("#btnPlay").click(); }
     if (e.code === 'KeyR') { $("#btnRestart").click(); }
     if (e.code === 'Escape' && tl.sel) { tl.sel = null; syncKfUI(); tl.dirty = true; drawTimeline(); }
   });
 
-  const ro = new ResizeObserver(() => scheduleBuild(120));
-  ro.observe($("#stageInner"));
+  if (!PROMO.on) {
+    const ro = new ResizeObserver(() => scheduleBuild(120));
+    ro.observe($("#stageInner"));
+  }
 }
 
 /* ---------------- 13. 视频导出 ---------------- */
@@ -3702,10 +3791,735 @@ function exportVideo() {
   }, (scene.total + 0.35) * 1000 + 120);
 }
 
+/* =========================================================
+   15. 宣传片模式（index.html?promo=1）
+   ---------------------------------------------------------
+   界面一行不改：把真实的 header / main / toast 装进一个固定 1920×1080 的画幅里
+   整体等比缩放，宣传片只负责驱动真实状态（代码 / 语言 / 主题 / 画幅 / 模版 /
+   关键帧 / 播放头 / 临时视角），再叠三层：纯排版画面、中文字幕、模拟光标。
+   因为 DOM 界面没法被 canvas 录制，导出改走系统录屏（getDisplayMedia）。
+   ========================================================= */
+const PROMO_TOTAL = 180;
+
+const PROMO = {
+  on: /[?&]promo=1\b/.test(location.search),
+  still: /[?&]still=1\b/.test(location.search),
+  t: 0, playing: false, barHide: false,
+  stageT: 0, cue: '', beat: null, sceneId: '', fxId: '', subIdx: -2,
+  fxRef: null, focus: null, hlEl: null, cx: 960, cy: 540, dragged: false,
+  rec: null, recOn: false, chunks: [], recTimer: 0,
+  frame: null, fx: null, fxBody: null, grid: null, sub: null, cur: null, rip: null, bar: null,
+};
+
+/* ---------------- 15.1 纯函数小工具 ---------------- */
+const psat = v => (v < 0 ? 0 : v > 1 ? 1 : v);
+const pease = t => 1 - Math.pow(1 - t, 3);
+/* 入场：只做自下而上的位移 + 淡入（无横向滑动、无缩放） */
+function penter(p, delay, dur, dist) {
+  const e = pease(psat((p - delay) / (dur || 0.5)));
+  return { a: e, dy: (1 - e) * (dist == null ? 24 : dist) };
+}
+function pkf(pts, t) {
+  const n = pts.length;
+  if (t <= pts[0][0]) return pts[0][1];
+  if (t >= pts[n - 1][0]) return pts[n - 1][1];
+  for (let i = 0; i < n - 1; i++) {
+    if (t <= pts[i + 1][0]) {
+      const k = (t - pts[i][0]) / (pts[i + 1][0] - pts[i][0]);
+      return pts[i][1] + (pts[i + 1][1] - pts[i][1]) * k;
+    }
+  }
+  return pts[n - 1][1];
+}
+function pmk(tag, css, html) {
+  const e = document.createElement(tag);
+  if (css) Object.assign(e.style, css);
+  if (html != null) e.innerHTML = html;
+  return e;
+}
+function pesc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function pmerge(a, b) { const o = {}; for (const k in a) o[k] = a[k]; for (const k in b) o[k] = b[k]; return o; }
+/* 按真实词法结果生成着色 HTML，每字符一个 span，便于逐字出现 */
+function pcodeHTML(src, langId, theme) {
+  const T = THEMES[theme] || THEMES.graphite;
+  const lines = splitLines(tokenize(normalizeCode(src), LANGS[langId] || LANGS.plain));
+  let h = '';
+  for (const ln of lines) {
+    for (const tk of ln) {
+      const col = T[tk.type] || T.text;
+      for (const ch of tk.text) h += '<span class="ch" style="color:' + col + '">' + pesc(ch) + '</span>';
+    }
+    h += '\n';
+  }
+  return h;
+}
+/* 元素在 1920×1080 画幅里的坐标：画幅被等比缩放过，所以要按缩放比折回来 */
+function prect(target) {
+  const e = typeof target === 'string' ? document.querySelector(target) : target;
+  if (!e) return null;
+  const r = e.getBoundingClientRect(), f = PROMO.frame.getBoundingClientRect();
+  const k = f.width / 1920 || 1;
+  return { x: (r.left - f.left) / k, y: (r.top - f.top) / k, w: r.width / k, h: r.height / k,
+           cx: (r.left - f.left + r.width / 2) / k, cy: (r.top - f.top + r.height / 2) / k };
+}
+
+/* ---------------- 15.2 时间轴：8 场 + 中文字幕 ---------------- */
+const PSC = [
+  { id: 'open', from: 0, to: 14, fx: 1 },
+  { id: 'id', from: 14, to: 30, fx: 1 },
+  { id: 'ui', from: 30, to: 64, fx: 0 },
+  { id: 'tpl', from: 64, to: 96, fx: 0 },
+  { id: 'move', from: 96, to: 126, fx: 0 },
+  { id: 'kf',   from: 126, to: 156, fx: 0, hold: 1 },
+  { id: 'tech', from: 156, to: 170, fx: 1 },
+  { id: 'end', from: 170, to: 180, fx: 1 },
+];
+const PSUB = [
+  [1.0, 6.4, '粘贴一段代码，然后呢？'],
+  [7.0, 11.4, '通常只能截图，或者录屏'],
+  [11.9, 14.0, 'Code Reel 让它自己写出来'],
+  [15.2, 20.4, '整个项目只有一个 index.html'],
+  [21.0, 25.4, '零依赖、零构建、零 CDN'],
+  [26.0, 30.0, '双击打开，就能用'],
+  [31.0, 37.4, '左侧粘贴代码'],
+  [38.0, 45.4, '内置词法分析器自动识别语言，19 种语言语法着色'],
+  [46.0, 54.4, '不依赖 highlight.js，也不需要任何 CDN'],
+  [55.0, 63.6, '中日韩双宽字符按码点定位，光标不会错位'],
+  [65.0, 72.4, '八个模版，一键套用整套外观与动画编排'],
+  [73.0, 81.4, '电影感、快闪、讲义、竖屏、电报、故障感、延时、慢读'],
+  [82.0, 89.4, '每个模版自带一条变速曲线，套完直接能播'],
+  [90.0, 95.6, '模版不会覆盖你已经写好的代码'],
+  [97.0, 104.4, '出现方式 × 镜头运动，两个维度自由组合'],
+  [105.0, 113.4, '打字机、逐词、逐行、语法块'],
+  [114.0, 122.4, '静止、推近、拉远、环绕、倾斜、横移'],
+  [123.0, 125.8, '取笛卡尔积，串成一条播放序列'],
+  [127.0, 134.4, '舞台下方是七通道关键帧编辑器'],
+  [135.0, 143.4, '速度、缩放、水平与垂直旋转，横移 X / 升降 Y / 推移 Z'],
+  [145.0, 151.4, '把画面拖到满意的角度松手，这一刻就固化成关键帧'],
+  [152.0, 155.6, '横移单位是相对画面的百分比，任何画幅观感一致'],
+  [157.0, 162.4, '离屏 Canvas 按设备像素绘制，WebGL 做真透视贴图'],
+  [163.0, 166.4, '旋转时没有拼接接缝，每一帧都是时间的纯函数'],
+  [167.0, 169.6, '拖进度条、导出、实时播放，三者逐帧一致'],
+  [171.0, 176.4, '开源 · MIT 协议'],
+  [177.0, 180.0, 'github.com/xkx121029/code-reel'],
+];
+function pSceneAt(t) {
+  for (const s of PSC) if (t >= s.from && t < s.to) return s;
+  return PSC[PSC.length - 1];
+}
+
+/* ---------------- 15.3 驱动真实状态 ---------------- */
+/* 把一组状态写进真实界面。同一份状态不重复构建（词法分析不便宜），
+   构建完把播放权交回宣传片自己，舞台时间从 0 起跑。 */
+function pCue(o) {
+  const key = JSON.stringify(o);
+  if (key === PROMO.cue) return;
+  PROMO.cue = key;
+  const ta = $("#code");
+  if (o.code != null && ta.value !== o.code) ta.value = o.code;
+  if (o.mode != null) S.mode = o.mode;
+  if (o.theme != null) S.theme = o.theme;
+  if (o.ratio != null) S.ratio = o.ratio;
+  if (o.reveal) S.reveal = o.reveal.slice();
+  if (o.move) S.move = o.move.slice();
+  if (o.fontSize != null) S.fontSize = o.fontSize;
+  if (o.speed != null) S.speed = o.speed;
+  if (o.gutter != null) S.gutter = o.gutter;
+  if (o.chrome != null) S.chrome = o.chrome;
+  if (o.shadow != null) S.shadow = o.shadow;
+  if (o.follow != null) S.follow = o.follow;
+  if (o.autoCam != null) S.autoCam = o.autoCam;
+  if (o.tpl !== undefined) S.tpl = o.tpl;
+  if (o.auto != null) S.auto = o.auto;
+  if (o.kf) {
+    S.kf = kfEmpty();
+    for (const id in o.kf) S.kf[id] = o.kf[id].map(k => ({ t: k.t, v: k.v }));
+  }
+  gradCache.key = '';
+  resetViewNow();
+  syncAllUI();
+  fitCanvas();
+  buildScene();
+  syncKfUI();
+  player.playing = false;         /* 播放权归宣传片 */
+  PROMO.stageT = 0;
+  player.t = 0;
+  updatePlayIcon();
+}
+
+/* 高亮环：一次只亮一个元素 */
+const PHL = {
+  code: () => $("#code").closest('.sec'),
+  lang: () => $("#langBadge"),
+  tpl: () => $("#tplChips"),
+  reveal: () => $("#revealChips"),
+  move: () => $("#moveChips"),
+  timeline: () => document.querySelector('.timeline'),
+  stage: () => document.querySelector('.stage-wrap'),
+  kf: () => $("#kfCh").closest('.sec'),
+  ratio: () => $("#ratioSeg"),
+};
+function pHl(el) {
+  if (PROMO.hlEl === el) return;
+  if (PROMO.hlEl) PROMO.hlEl.classList.remove('pmhl');
+  PROMO.hlEl = el || null;
+  if (el) el.classList.add('pmhl');
+}
+function pClick() {
+  const r = PROMO.rip;
+  r.classList.remove('on');
+  r.style.left = PROMO.cx.toFixed(1) + 'px';
+  r.style.top = PROMO.cy.toFixed(1) + 'px';
+  void r.offsetWidth;
+  r.classList.add('on');
+}
+/* 节拍表：一条时间轴串起「改状态 / 指哪里 / 点亮哪里 / 额外动作」 */
+function pBeats(list, t) {
+  let b = list[0];
+  for (const x of list) if (t >= x.t) b = x;
+  if (PROMO.beat !== b) {
+    PROMO.beat = b;
+    if (b.cue) pCue(b.cue);
+    if (b.apply) b.apply();
+    if (b.click) setTimeout(pClick, 480);
+  }
+  pHl(b.hl && PHL[b.hl] ? PHL[b.hl]() : null);
+  PROMO.focus = b.focus ? document.querySelector(b.focus) : null;
+}
+
+/* ---------------- 15.4 三场界面戏的节拍 ---------------- */
+/* S3 · 界面：粘贴 → 语言识别 → 无 CDN → 中日韩双宽 */
+const UI3_BASE = { theme: 'graphite', ratio: 16 / 9, reveal: ['type'], move: ['push'],
+                   fontSize: 15, speed: 2.0, gutter: true, chrome: true, shadow: true,
+                   follow: false, autoCam: false, tpl: 'cinema', auto: true, mode: 'auto' };
+const UI3 = [
+  { t: 30.0, cue: pmerge(UI3_BASE, { code: '', move: ['still'], speed: 1.1, tpl: null }),
+    hl: 'code', focus: null },
+  { t: 31.6, cue: pmerge(UI3_BASE, { code: SAMPLES.javascript }), hl: 'code', focus: '#code', click: 1 },
+  { t: 38.2, cue: pmerge(UI3_BASE, { code: SAMPLES.python }), hl: 'lang', focus: '#langBadge', click: 1 },
+  { t: 40.9, cue: pmerge(UI3_BASE, { code: SAMPLES.go }), hl: 'lang', focus: '#langBadge', click: 1 },
+  { t: 43.4, cue: pmerge(UI3_BASE, { code: SAMPLES.cpp }), hl: 'lang', focus: '#langBadge', click: 1 },
+  { t: 46.0, cue: pmerge(UI3_BASE, { code: SAMPLES.rust, speed: 2.4 }), hl: 'code', focus: '#code' },
+  { t: 55.0, cue: pmerge(UI3_BASE, { code: SAMPLES.javascript, speed: 1.6, tpl: null }),
+    hl: 'code', focus: '#code' },
+];
+
+/* S4 · 模版巡礼：直接调真实的 applyTemplate，连 toast 都是真的 */
+const TPL_AT = TEMPLATES.map((T, i) => 65.0 + i * 3.85);
+function scTpl(p, t) {
+  let i = 0;
+  for (let k = 0; k < TPL_AT.length; k++) if (t >= TPL_AT[k]) i = k;
+  const T = TEMPLATES[i];
+  if (PROMO.beat !== T) {
+    PROMO.beat = T;
+    /* 最后一个是「模版不会覆盖你已经写好的代码」：不清空，保留上一段的代码 */
+    if (i < TEMPLATES.length - 1) $("#code").value = '';
+    applyTemplate(T);
+    S.speed = clamp(T.speed * 2, 0.4, 2.6);      /* 巡礼只有 3.85 秒，稍微加个速 */
+    buildScene();
+    player.playing = false;
+    PROMO.stageT = 0;
+    player.t = 0;
+    updatePlayIcon();
+  }
+  pHl(PHL.tpl());
+  const chips = document.querySelectorAll('#tplChips .tpl');
+  PROMO.focus = chips[i] || null;
+}
+
+/* S5 · 出现方式 × 镜头运动 */
+const UI5_BASE = { code: SAMPLES.javascript, theme: 'graphite', ratio: 16 / 9, fontSize: 15,
+                   speed: 2.2, gutter: true, chrome: true, shadow: true, follow: false,
+                   autoCam: false, tpl: 'cinema', auto: true, mode: 'auto' };
+const UI5 = [{ t: 97.0, cue: pmerge(UI5_BASE, { reveal: ['type'], move: ['still'] }),
+               hl: 'reveal', focus: '#revealChips' }];
+['type', 'word', 'line', 'block'].forEach((id, i) => UI5.push({
+  t: 105.0 + i * 2.1, cue: pmerge(UI5_BASE, { reveal: [id], move: ['still'] }),
+  hl: 'reveal', focus: '#revealChips', click: 1,
+}));
+['still', 'push', 'pull', 'orbit', 'tilt', 'pan'].forEach((id, i) => UI5.push({
+  t: 114.0 + i * 1.5, cue: pmerge(UI5_BASE, { reveal: ['type'], move: [id] }),
+  hl: 'move', focus: '#moveChips', click: 1,
+}));
+UI5.push({ t: 123.0, cue: pmerge(UI5_BASE, { reveal: ['type', 'word'], move: ['push', 'orbit'] }),
+           hl: 'timeline', focus: '.tl-svg' });
+
+/* S6 · 关键帧编辑器 */
+const KF6 = {
+  speed: [{ t: 0, v: 0.75 }, { t: 4.5, v: 1.9 }, { t: 9, v: 0.7 }],
+  zoom: [{ t: 0, v: 0.88 }, { t: 6, v: 1.14 }, { t: 12, v: 1.0 }],
+  rotY: [{ t: 0, v: -16 }, { t: 6, v: 10 }, { t: 12, v: -4 }],
+  rotX: [{ t: 0, v: 7 }, { t: 5, v: -7 }, { t: 11, v: 3 }],
+  panX: [{ t: 0, v: -9 }, { t: 7, v: 11 }, { t: 13, v: 0 }],
+  panY: [{ t: 0, v: 6 }, { t: 8, v: -8 }],
+  panZ: [{ t: 0, v: -7 }, { t: 9, v: 15 }],
+};
+const KF6_BASE = { code: SAMPLES.javascript, theme: 'graphite', ratio: 16 / 9, reveal: ['type'],
+                   move: ['still'], fontSize: 15, speed: 1.6, gutter: true, chrome: true,
+                   shadow: true, follow: false, autoCam: false, tpl: null, auto: false };
+const UI6 = [{ t: 127.0, cue: pmerge(KF6_BASE, { kf: KF6 }), hl: 'timeline', focus: '.tl-svg' }];
+[['speed', 4.5], ['zoom', 6], ['rotY', 6], ['rotX', 5], ['panX', 7], ['panY', 8], ['panZ', 9]]
+  .forEach((c, i) => UI6.push({
+    t: 135.0 + i * 1.4, hl: 'kf', focus: '#kfCh',
+    apply: () => {
+      const arr = S.kf[c[0]] || [];
+      let k = arr[0];
+      for (const x of arr) if (Math.abs(x.t - c[1]) < 0.05) k = x;
+      tl.sel = k ? { t: k.t, ch: c[0], k } : null;
+      syncKfUI();
+      tl.dirty = true;
+    },
+  }));
+UI6.push({ t: 145.0, hl: 'stage', focus: '.stage-wrap',
+           apply: () => { tl.sel = null; syncKfUI(); PROMO.dragged = false; } });
+UI6.push({ t: 152.0, cue: pmerge(KF6_BASE, { ratio: 9 / 16 }), hl: 'ratio', focus: '#ratioSeg' });
+UI6.push({ t: 154.0, cue: pmerge(KF6_BASE, { ratio: 1 / 1 }), hl: 'ratio', focus: '#ratioSeg' });
+
+function scKf(p, t) {
+  pBeats(UI6, t);
+  /* 145.0 → 147.6 模拟「抓住画面拖角度」，松手那一刻由真实的 bakeDrag 固化成关键帧 */
+  if (t >= 145.0 && t < 147.6) {
+    const e = pease(psat((t - 145.0) / 2.4));
+    view3d.rotY = 15 * DEG * e;
+    view3d.panX = -7 * e;
+    view3d.panY = 3.5 * e;
+    updateViewLabel();
+  } else if (t >= 147.6 && !PROMO.dragged) {
+    PROMO.dragged = true;
+    bakeView(player.t);
+    bakePan(player.t);
+  }
+}
+
+/* ---------------- 15.5 纯排版画面（片头 / 身份 / 技术 / 片尾） ---------------- */
+function fxBuild(id, build) {
+  if (PROMO.fxId === id) return;
+  PROMO.fxId = id;
+  PROMO.fxRef = null;
+  PROMO.fxBody.innerHTML = '';
+  build(PROMO.fxBody);
+}
+function fxBg(t, alpha, yaw) {
+  PROMO.grid.style.transform = 'perspective(6000px) rotateX('
+    + (66 + 2.4 * Math.sin(t * 0.19)).toFixed(2) + 'deg) scale(1.24)';
+  PROMO.grid.style.opacity = alpha.toFixed(3);
+  void yaw;
+}
+/* 通用行式排版：左侧编号 / 标题 / 说明，右侧标签。
+   建 DOM 与逐帧推进分开 —— 返回一个 update(p)，由各场景每帧调用。 */
+function fxRows(box, rows, at, top, step, colorOf) {
+  const refs = [];
+  rows.forEach((r, i) => {
+    const y = top + i * step;
+    const rule = pmk('div', { left: '200px', right: '200px', top: (y - 46) + 'px' }, null);
+    rule.className = 'fxRule';
+    box.appendChild(rule);
+    const num = pmk('div', { left: '200px', top: (y - 20) + 'px', fontFamily: 'var(--mono)',
+      fontSize: '58px', fontWeight: '600', letterSpacing: '1px', color: colorOf(r, i) }, null);
+    num.className = 'fxLn'; num.textContent = r[0];
+    const ti = pmk('div', { left: '420px', top: (y - 22) + 'px', fontSize: '31px',
+      fontWeight: '500', letterSpacing: '2px', color: '#e9ebe8' }, null);
+    ti.className = 'fxLn'; ti.textContent = r[1];
+    const de = pmk('div', { left: '420px', top: (y + 22) + 'px', fontSize: '19px',
+      color: '#8b8b91', letterSpacing: '.5px' }, null);
+    de.className = 'fxLn'; de.textContent = r[2];
+    const tg = pmk('div', { right: '200px', top: (y - 8) + 'px', fontFamily: 'var(--mono)',
+      fontSize: '17px', color: '#63636b', letterSpacing: '1px' }, null);
+    tg.className = 'fxLn'; tg.textContent = r[3];
+    box.appendChild(num); box.appendChild(ti); box.appendChild(de); box.appendChild(tg);
+    refs.push({ rule, num, ti, de, tg });
+  });
+  return p => {
+    refs.forEach((R, i) => {
+      const e = penter(p, at[i], 0.5, 34);
+      [R.num, R.ti, R.de, R.tg].forEach(el2 => {
+        el2.style.opacity = e.a.toFixed(3);
+        el2.style.transform = 'translateY(' + e.dy.toFixed(2) + 'px)';
+      });
+      R.rule.style.opacity = (e.a * 0.9).toFixed(3);
+    });
+  };
+}
+
+/* S1 · 片头：代码窗口 + 打字机 */
+function fxOpen(p, t) {
+  fxBuild('open', box => {
+    const win = pmk('div', { width: '1060px' }, null);
+    win.className = 'cw';
+    win.innerHTML = '<div class="cw-bar"><i></i><i></i><i></i><span>quickSort.js</span></div>'
+      + '<pre class="cw-body"></pre>';
+    const pre = win.querySelector('.cw-body');
+    pre.innerHTML = pcodeHTML(SAMPLES.javascript, 'javascript', 'graphite');
+    const caret = pmk('div', null, null);
+    caret.className = 'cw-caret';
+    win.appendChild(caret);
+    const glow = pmk('div', { position: 'absolute', left: '50%', top: '50%', width: '1500px',
+      height: '900px', margin: '-450px 0 0 -750px', borderRadius: '50%',
+      background: 'radial-gradient(closest-side,rgba(232,102,58,.20),rgba(232,102,58,0) 72%)' }, null);
+    box.appendChild(glow); box.appendChild(win);
+    PROMO.fxRef = { win, caret, glow, chars: pre.querySelectorAll('.ch'), n: -1 };
+  });
+  const R = PROMO.fxRef;
+  if (!R) return;
+  fxBg(t, psat(t / 1.6), 0);
+  R.glow.style.opacity = (0.5 + 0.5 * psat(t / 2.5)).toFixed(3);
+  /* 逐字出现 */
+  const u = psat((t - 0.9) / 11.0);
+  const n = Math.round(u * R.chars.length);
+  if (n !== R.n) {
+    if (n > R.n) for (let i = Math.max(0, R.n); i < n; i++) R.chars[i].style.opacity = '1';
+    else for (let i = n; i < R.n; i++) R.chars[i].style.opacity = '0';
+    R.n = n;
+    const c = R.chars[Math.max(0, n - 1)];
+    if (c) {
+      R.caret.style.left = (c.offsetLeft + c.offsetWidth) + 'px';
+      R.caret.style.top = c.offsetTop + 'px';
+    }
+  }
+  R.caret.style.opacity = (t > 1.2 && (t % 1) < 0.62) ? '1' : '0';
+  const yaw = pkf([[0, -16], [4.2, -7], [9, -3], [14, -10]], t);
+  const pit = pkf([[0, 8], [4.2, 3], [9, 1], [14, 5]], t);
+  const sc = pkf([[0, 0.93], [2.8, 1.0], [9, 1.03], [14, 0.96]], t);
+  const dy = pkf([[0, 64], [2.8, 0], [14, -34]], t);
+  R.win.style.opacity = psat(t / 1.3).toFixed(3);
+  R.win.style.transform = 'perspective(2200px) translate3d(0,' + dy.toFixed(1) + 'px,0) rotateY('
+    + yaw.toFixed(2) + 'deg) rotateX(' + pit.toFixed(2) + 'deg) scale(' + sc.toFixed(3) + ')';
+}
+
+/* S2 · 身份：编辑式清单 */
+const ID_ROWS = [
+  ['1', '个 index.html', '全部功能都在这一个文件里', 'index.html', '#e8663a'],
+  ['0', '外部依赖', '没有 npm install，没有 CDN', 'dependencies', '#8fb8a6'],
+  ['0', '构建步骤', '克隆下来，双击就能跑', 'build step', '#d9a55e'],
+  ['100%', '本地运行', '代码不上传，全在浏览器里跑', 'client-side', '#7fb2c9'],
+];
+function fxId(p, t) {
+  fxBuild('id', box => {
+    const wrap = pmk('div', null, null);
+    wrap.className = 'fxAbs';
+    box.appendChild(wrap);
+    const title = pmk('div', { left: '200px', top: '244px', fontFamily: 'var(--mono)',
+      fontSize: '100px', fontWeight: '600', letterSpacing: '12px', color: '#f0f2f0' }, null);
+    title.className = 'fxLn'; title.textContent = 'Code Reel';
+    const sub = pmk('div', { left: '206px', top: '392px', fontSize: '29px', letterSpacing: '12px',
+      color: '#8b8b91' }, null);
+    sub.className = 'fxLn'; sub.textContent = '代码动画生成器';
+    const r1 = pmk('div', { left: '200px', right: '200px', top: '452px' }, null);
+    r1.className = 'fxRule';
+    const r2 = pmk('div', { left: '200px', right: '200px', top: '930px' }, null);
+    r2.className = 'fxRule';
+    wrap.appendChild(title); wrap.appendChild(sub); wrap.appendChild(r1); wrap.appendChild(r2);
+    PROMO.fxRef = { title, sub, r1, r2,
+      update: fxRows(wrap, ID_ROWS, [1.2, 7.0, 7.4, 12.0], 566, 96, (r, i) => ID_ROWS[i][4]) };
+  });
+  const R = PROMO.fxRef;
+  if (!R) return;
+  fxBg(t, 0.5, 0);
+  const a1 = penter(p, 0.05, 0.55, 44), a2 = penter(p, 0.18, 0.55, 26), a3 = penter(p, 0.34, 0.6, 0);
+  R.title.style.opacity = a1.a.toFixed(3);
+  R.title.style.transform = 'translateY(' + a1.dy.toFixed(2) + 'px)';
+  R.sub.style.opacity = a2.a.toFixed(3);
+  R.sub.style.transform = 'translateY(' + a2.dy.toFixed(2) + 'px)';
+  R.r1.style.opacity = (a3.a * 0.9).toFixed(3);
+  R.r2.style.opacity = (penter(p, 13.4, 0.6, 0).a * 0.9).toFixed(3);
+  R.update(p);
+}
+
+/* S7 · 技术特征 */
+const TECH_ROWS = [
+  ['01', '自研词法分析器', '19 种语言语法着色，不依赖 highlight.js 与任何 CDN', 'lexer', '#e8663a'],
+  ['02', 'WebGL 真透视贴图', '硬件做透视插值，平面旋转时没有切片仿射的拼接接缝', 'WebGL', '#8fb8a6'],
+  ['03', '时间是纯函数', '拖动进度条、导出视频与实时播放，逐帧完全一致', 'pure function', '#d9a55e'],
+  ['04', 'MediaRecorder', '实时录制画布并下载 WebM，Chrome / Edge 优先 VP9', 'export', '#7fb2c9'],
+];
+function fxTech(p, t) {
+  fxBuild('tech', box => {
+    const wrap = pmk('div', null, null);
+    wrap.className = 'fxAbs';
+    box.appendChild(wrap);
+    const head = pmk('div', { left: '200px', top: '206px', fontSize: '33px', fontWeight: '500',
+      letterSpacing: '7px', color: '#e9ebe8' }, null);
+    head.className = 'fxLn'; head.textContent = '技术特征';
+    const r0 = pmk('div', { left: '200px', right: '200px', top: '268px' }, null);
+    r0.className = 'fxRule';
+    const rN = pmk('div', { left: '200px', right: '200px', top: '948px' }, null);
+    rN.className = 'fxRule';
+    wrap.appendChild(head); wrap.appendChild(r0); wrap.appendChild(rN);
+    PROMO.fxRef = { head, r0, rN,
+      update: fxRows(wrap, TECH_ROWS, [1.0, 3.6, 7.0, 11.0], 400, 152, (r, i) => TECH_ROWS[i][4]) };
+  });
+  const R = PROMO.fxRef;
+  if (!R) return;
+  fxBg(t, 0.42, 0);
+  const e0 = penter(p, 0.1, 0.55, 34);
+  R.head.style.opacity = e0.a.toFixed(3);
+  R.head.style.transform = 'translateY(' + e0.dy.toFixed(2) + 'px)';
+  R.r0.style.opacity = (penter(p, 0.3, 0.6, 0).a * 0.9).toFixed(3);
+  R.rN.style.opacity = (penter(p, 12.4, 0.6, 0).a * 0.9).toFixed(3);
+  R.update(p);
+}
+
+/* S8 · 片尾 */
+function fxEnd(p, t) {
+  fxBuild('end', box => {
+    const wrap = pmk('div', null, null);
+    wrap.className = 'fxAbs';
+    box.appendChild(wrap);
+    const mk = (css, txt) => { const e = pmk('div', css, null); e.className = 'fxLn'; e.textContent = txt;
+      wrap.appendChild(e); return e; };
+    const title = mk({ left: '200px', top: '336px', fontFamily: 'var(--mono)', fontSize: '104px',
+      fontWeight: '600', letterSpacing: '12px', color: '#f2f4f2' }, 'Code Reel');
+    const rule = pmk('div', { left: '200px', right: '200px', top: '492px' }, null);
+    rule.className = 'fxRule'; wrap.appendChild(rule);
+    const lic = mk({ left: '200px', top: '542px', fontSize: '30px', letterSpacing: '6px',
+      color: '#8b8b91' }, '开源 · MIT 协议');
+    const gh = mk({ left: '200px', top: '648px', fontFamily: 'var(--mono)', fontSize: '25px',
+      letterSpacing: '1px', color: '#7fb2c9' }, 'github.com/xkx121029/code-reel');
+    const ge = mk({ left: '200px', top: '700px', fontFamily: 'var(--mono)', fontSize: '25px',
+      letterSpacing: '1px', color: '#8fb8a6' }, 'gitee.com/xkx1029/code-reel');
+    const tag = mk({ left: '200px', top: '808px', fontSize: '21px', letterSpacing: '4px',
+      color: '#63636b' }, '单文件 · 零依赖 · 零构建 · 双击即用');
+    PROMO.fxRef = { title, rule, lic, gh, ge, tag };
+  });
+  const R = PROMO.fxRef;
+  if (!R) return;
+  fxBg(t, 0.5, 0);
+  const items = [[R.title, 0.1, 46], [R.lic, 0.5, 26], [R.gh, 1.2, 22], [R.ge, 2.2, 22], [R.tag, 5.0, 22]];
+  items.forEach(it => {
+    const e = penter(p, it[1], 0.55, it[2]);
+    it[0].style.opacity = e.a.toFixed(3);
+    it[0].style.transform = 'translateY(' + e.dy.toFixed(2) + 'px)';
+  });
+  R.rule.style.opacity = (penter(p, 0.32, 0.6, 0).a * 0.9).toFixed(3);
+}
+
+function pDrawFx(sc, p, t) {
+  if (!sc) return;
+  if (sc.id === 'open') fxOpen(p, t);
+  else if (sc.id === 'id') fxId(p, t);
+  else if (sc.id === 'tech') fxTech(p, t);
+  else if (sc.id === 'end') fxEnd(p, t);
+}
+
+/* ---------------- 15.6 叠层：字幕与模拟光标 ---------------- */
+function pSubs(t) {
+  let idx = -1, a = 0;
+  for (let i = 0; i < PSUB.length; i++) {
+    const s = PSUB[i];
+    if (t >= s[0] && t < s[1]) {
+      idx = i;
+      a = Math.min(1, (t - s[0]) / 0.22, (s[1] - t) / 0.22);
+      break;
+    }
+  }
+  if (idx !== PROMO.subIdx) {
+    PROMO.subIdx = idx;
+    if (idx >= 0) PROMO.sub.firstChild.textContent = PSUB[idx][2];
+  }
+  PROMO.sub.style.opacity = psat(a).toFixed(3);
+}
+function pCursor(dt) {
+  const f = PROMO.focus;
+  const r = f ? prect(f) : null;
+  if (!r) { PROMO.cur.style.opacity = '0'; return; }
+  /* dt 为 0（静帧）时必须直接落位，否则指数趋近永远走不到目标 */
+  const k = dt > 0 ? 1 - Math.pow(0.0016, dt) : 1;
+  PROMO.cx += (r.cx - PROMO.cx) * k;
+  PROMO.cy += (r.cy - PROMO.cy) * k;
+  PROMO.cur.style.transform = 'translate(' + PROMO.cx.toFixed(1) + 'px,' + PROMO.cy.toFixed(1) + 'px)';
+  PROMO.cur.style.opacity = '1';
+}
+
+/* ---------------- 15.7 主循环与外壳 ---------------- */
+PROMO.tick = function (dt) {
+  if (PROMO.still) dt = 0;
+  if (PROMO.playing && !PROMO.still) PROMO.t = Math.min(PROMO_TOTAL, PROMO.t + dt);
+  const t = PROMO.t;
+  const sc = pSceneAt(t), p = t - sc.from;
+  if (PROMO.sceneId !== sc.id) {
+    PROMO.sceneId = sc.id; PROMO.cue = ''; PROMO.beat = null; PROMO.fxId = '';
+  }
+  /* 图层交叉淡化：0.7 秒里把界面和排版画面互切 */
+  let a = sc.fx ? 1 : 0;
+  if (p < 0.7) {
+    const i = PSC.indexOf(sc), prev = i > 0 ? PSC[i - 1] : null;
+    if (prev && !!prev.fx !== !!sc.fx) a = sc.fx ? psat(p / 0.7) : 1 - psat(p / 0.7);
+  }
+  PROMO.fx.style.opacity = a.toFixed(3);
+  PROMO.fx.style.visibility = a < 0.005 ? 'hidden' : 'visible';
+  if (sc.fx) pDrawFx(sc, p, t);
+  else {
+    const i = PSC.indexOf(sc);
+    if (a > 0.005) pDrawFx(PSC[i - 1], t - PSC[i - 1].from, t);
+    if (sc.id === 'ui') pBeats(UI3, t);
+    else if (sc.id === 'tpl') scTpl(p, t);
+    else if (sc.id === 'move') pBeats(UI5, t);
+    else if (sc.id === 'kf') scKf(p, t);
+  }
+  /* 舞台时间：由宣传片自己推进，播完从头再来 */
+  if (PROMO.still && PROMO.stageT === 0 && scene.ready) PROMO.stageT = scene.total * 0.6;
+  else PROMO.stageT += dt;
+  if (scene.ready && scene.total > 0) {
+    /* hold 场次（关键帧戏）把代码钉在写完状态，好让旋转 / 横移的幅度被看清 */
+    if (sc.hold) PROMO.stageT = scene.total;
+    else if (PROMO.stageT > scene.total + 0.9) PROMO.stageT = 0;
+    player.t = clamp(PROMO.stageT, 0, scene.total);
+  } else player.t = 0;
+
+  pSubs(t);
+  pCursor(dt);
+  if (PROMO.playing && PROMO.t >= PROMO_TOTAL && !PROMO.still) {
+    PROMO.playing = false;
+    if (PROMO.recOn) PROMO.stopRec();
+  }
+  PROMO.syncBar();
+};
+
+PROMO.syncBar = function () {
+  if (!PROMO.bar) return;
+  PROMO.bar.classList.toggle('hide', PROMO.barHide);
+  if (PROMO.barHide) return;
+  PROMO.scrub.value = String(Math.round(PROMO.t * 10));
+  PROMO.time.innerHTML = '<b>' + PROMO.t.toFixed(1) + '</b> / ' + PROMO_TOTAL + '.0 s';
+  PROMO.play.textContent = PROMO.playing ? '暂停' : '播放';
+};
+
+PROMO.boot = function () {
+  document.body.classList.add('promo');
+  const root = pmk('div', null, null); root.id = 'promoRoot';
+  const frame = pmk('div', null, null); frame.id = 'promoFrame';
+  /* 把真实界面整体搬进固定画幅 */
+  frame.appendChild(document.querySelector('body > header'));
+  frame.appendChild(document.querySelector('body > main'));
+  frame.appendChild(document.querySelector('body > .toast'));
+  const fx = pmk('div', null, null); fx.id = 'promoFx';
+  const grid = pmk('div', null, null); grid.id = 'fxGrid';
+  const body = pmk('div', null, null); body.id = 'fxBody';
+  fx.appendChild(grid); fx.appendChild(body);
+  const sub = pmk('div', null, null); sub.id = 'promoSub'; sub.innerHTML = '<span></span>';
+  const rip = pmk('div', null, null); rip.id = 'promoRipple';
+  const cur = pmk('div', null, null); cur.id = 'promoCursor';
+  const bar = pmk('div', null, null); bar.id = 'promoBar';
+  bar.innerHTML =
+    '<button class="btn btn-primary" id="pmPlay">暂停</button>'
+    + '<button class="btn" id="pmRestart">重播</button>'
+    + '<input type="range" id="pmScrub" min="0" max="1800" step="1" value="0">'
+    + '<span class="time" id="pmTime"><b>0.0</b> / 180.0 s</span>'
+    + '<button class="btn" id="pmFull">全屏</button>'
+    + '<button class="btn" id="pmRec">开始录制</button>'
+    + '<button class="btn" id="pmHide">隐藏控件（H）</button>'
+    + '<span class="pnote">录制：点「开始录制」→ 选「此标签页」→ 自动录满 180 秒并下载 WebM</span>';
+  frame.appendChild(fx); frame.appendChild(sub); frame.appendChild(rip);
+  frame.appendChild(cur); frame.appendChild(bar);
+  root.appendChild(frame);
+  document.body.appendChild(root);
+  PROMO.frame = frame; PROMO.fx = fx; PROMO.fxBody = body; PROMO.grid = grid;
+  PROMO.sub = sub; PROMO.cur = cur; PROMO.rip = rip; PROMO.bar = bar;
+  PROMO.play = $("#pmPlay"); PROMO.scrub = $("#pmScrub"); PROMO.time = $("#pmTime");
+
+  PROMO.fit();
+  window.addEventListener('resize', PROMO.fit);
+
+  PROMO.play.addEventListener('click', () => {
+    PROMO.playing = !PROMO.playing;
+    if (PROMO.playing && PROMO.t >= PROMO_TOTAL) PROMO.t = 0;
+    PROMO.syncBar();
+  });
+  $("#pmRestart").addEventListener('click', () => {
+    PROMO.t = 0; PROMO.sceneId = ''; PROMO.cue = ''; PROMO.beat = null; PROMO.fxId = '';
+    PROMO.stageT = 0; PROMO.playing = true; PROMO.syncBar();
+  });
+  PROMO.scrub.addEventListener('input', e => {
+    PROMO.playing = false;
+    PROMO.t = clamp(parseInt(e.target.value, 10) / 10, 0, PROMO_TOTAL);
+    PROMO.sceneId = ''; PROMO.cue = ''; PROMO.beat = null; PROMO.fxId = ''; PROMO.stageT = 0;
+    PROMO.syncBar();
+  });
+  $("#pmFull").addEventListener('click', () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(() => { });
+  });
+  $("#pmHide").addEventListener('click', () => { PROMO.barHide = true; PROMO.syncBar(); });
+  $("#pmRec").addEventListener('click', PROMO.record);
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    if (e.code === 'KeyH') { PROMO.barHide = !PROMO.barHide; PROMO.syncBar(); }
+    if (e.code === 'Space') {
+      e.preventDefault();
+      PROMO.playing = !PROMO.playing;
+      if (PROMO.playing && PROMO.t >= PROMO_TOTAL) PROMO.t = 0;
+      PROMO.syncBar();
+    }
+  });
+};
+
+PROMO.fit = function () {
+  const k = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+  PROMO.frame.style.transform = 'scale(' + k.toFixed(5) + ')';
+};
+
+PROMO.record = async function () {
+  if (PROMO.recOn) { PROMO.stopRec(); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
+    toast('当前浏览器不支持屏幕录制，请手动录屏'); return;
+  }
+  if (typeof MediaRecorder === 'undefined') { toast('当前浏览器不支持视频录制'); return; }
+  const mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
+    .find(m => MediaRecorder.isTypeSupported(m));
+  if (!mime) { toast('当前浏览器不支持 WebM 录制'); return; }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: 60, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false,
+    });
+  } catch (err) { return; }
+  PROMO.chunks = [];
+  try {
+    PROMO.rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 24000000 });
+  } catch (err) { toast('录制初始化失败：' + err.message); return; }
+  PROMO.rec.ondataavailable = e => { if (e.data && e.data.size) PROMO.chunks.push(e.data); };
+  PROMO.rec.onstop = () => {
+    stream.getTracks().forEach(t => t.stop());
+    const blob = new Blob(PROMO.chunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+    a.href = url; a.download = `code-reel-promo-${ts}.webm`; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    PROMO.recOn = false; PROMO.rec = null;
+    $("#pmRec").textContent = '开始录制';
+    toast('宣传片已生成');
+  };
+  PROMO.recOn = true;
+  $("#pmRec").textContent = '停止录制';
+  PROMO.t = 0; PROMO.sceneId = ''; PROMO.cue = ''; PROMO.beat = null; PROMO.fxId = '';
+  PROMO.stageT = 0; PROMO.playing = true; PROMO.barHide = true;
+  PROMO.rec.start();
+  PROMO.syncBar();
+};
+PROMO.stopRec = function () {
+  if (PROMO.recTimer) { clearTimeout(PROMO.recTimer); PROMO.recTimer = 0; }
+  if (PROMO.rec && PROMO.recOn) { try { PROMO.rec.stop(); } catch (e) { } }
+  PROMO.barHide = false;
+  PROMO.syncBar();
+};
+
+PROMO.start = function () {
+  PROMO.t = 0; PROMO.playing = true; PROMO.stageT = 0;
+  const q = /[?&]t=([\d.]+)/.exec(location.search);
+  if (PROMO.still && q) { PROMO.t = clamp(parseFloat(q[1]) || 0, 0, PROMO_TOTAL); PROMO.playing = false; }
+  if (PROMO.still) PROMO.barHide = true;
+  PROMO.syncBar();
+  PROMO.tick(0);
+};
+
 /* ---------------- 14. 启动 ---------------- */
 function init() {
   fillSelects();
   bindUI();
+  /* 宣传片模式：必须在首次 fitCanvas 之前把真实界面搬进固定画幅，
+     否则 canvas 会按窗口尺寸算一次，画幅切换后要等 resize 才纠正。 */
+  if (PROMO.on) PROMO.boot();
   $("#code").value = SAMPLES.javascript;
   S.mode = 'auto';
   fitCanvas();
@@ -3715,6 +4529,7 @@ function init() {
   player.playing = true;
   player.last = performance.now();
   updatePlayIcon();
+  if (PROMO.on) { player.playing = false; PROMO.start(); }
   requestAnimationFrame(loop);
 }
 init();
