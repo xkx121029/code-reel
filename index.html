@@ -3431,6 +3431,11 @@ function loop(now) {
     player.t += dt;
     if (player.t >= scene.total) { player.t = scene.total; player.playing = false; updatePlayIcon(); }
   }
+  /* 导出中：播放头、画面、进度反馈都由导出循环自己按固定节奏驱动。
+     主循环先让出主线程 —— 否则同一帧被渲染两遍，编码器只能跟自己的页面抢 CPU，
+     抓到的帧间隔就会忽长忽短，录出来的文件一顿一顿。 */
+  if (player.recording) { requestAnimationFrame(loop); return; }
+
   renderAt(player.t);
 
   /* 时间轴：宽度或内容变了才重建，平时只挪播放头 */
@@ -3745,16 +3750,40 @@ function bindUI() {
   }
 }
 
-/* ---------------- 13. 视频导出 ---------------- */
-function exportVideo() {
+/* ---------------- 13. 视频导出 ----------------
+   逐帧确定性录制：captureStream(0) 不自动抓帧，每渲染一帧就 requestFrame() 推一帧，
+   推帧节奏按绝对时刻排程（第 i 帧落在 t0 + i/FPS）。
+   之前用 captureStream(60) 自动抓帧，抓帧时刻跟着主循环的抖动走 —— 编码抢 CPU、
+   重建时间轴、GC 都会把某一帧推后十几毫秒，时间戳忽长忽短，
+   导出的文件看起来就是一顿一顿的。 */
+const EXPORT_FPS = 60;
+const sleepMs = ms => new Promise(r => setTimeout(r, ms));
+
+async function exportVideo() {
   if (!scene.ready) { toast('请先输入代码'); return; }
   if (player.recording) return;
   if (typeof MediaRecorder === 'undefined') { toast('当前浏览器不支持视频录制'); return; }
+  if (typeof cv.captureStream !== 'function') { toast('当前浏览器不支持画布录制'); return; }
   const mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
     .find(m => MediaRecorder.isTypeSupported(m));
   if (!mime) { toast('当前浏览器不支持 WebM 录制'); return; }
 
-  const stream = cv.captureStream(60);
+  /* 视角补间是墙钟驱动的，留在导出里会跟固定帧节奏打架 —— 先收到终态 */
+  if (viewTween) {
+    viewTween = null;
+    view3d.rotX = 0; view3d.rotY = 0; view3d.dist = 0; view3d.panX = 0; view3d.panY = 0;
+    updateViewLabel();
+  }
+
+  let stream = cv.captureStream(0);
+  let track = stream.getVideoTracks()[0];
+  const manual = !!(track && typeof track.requestFrame === 'function');
+  if (!manual) {
+    /* 不支持手动推帧：退回自动抓帧，但帧率由固定的推帧循环决定，仍靠循环里的精确唤醒稳住节奏 */
+    stream = cv.captureStream(EXPORT_FPS);
+    track = stream.getVideoTracks()[0];
+  }
+
   let rec;
   try {
     rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 12000000 });
@@ -3778,17 +3807,40 @@ function exportVideo() {
   };
 
   player.recording = true;
-  $("#btnExport").disabled = true;
-  $("#btnExport").textContent = '录制中…';
-  player.t = 0;
   player.playing = false;
+  $("#btnExport").disabled = true;
+  $("#btnExport").textContent = '准备录制…';
+
+  const total = scene.total;
+  const frameMs = 1000 / EXPORT_FPS;
+  const frames = Math.max(1, Math.ceil(total * EXPORT_FPS));
+
+  player.t = 0;
   renderAt(0);
   rec.start();
-  setTimeout(() => { player.last = performance.now(); player.playing = true; }, 60);
-  setTimeout(() => {
-    player.playing = false;
+  await sleepMs(120);                    /* 等编码器真正起来，第一帧才不会被吃掉 */
+
+  try {
+    if (manual) track.requestFrame();
+    const t0 = performance.now();
+    for (let i = 1; i <= frames; i++) {
+      const ft = Math.min(total, i / EXPORT_FPS);
+      player.t = ft;
+      renderAt(ft);                       /* 先把这一帧画好 */
+      /* 再等到这一帧该出现的绝对时刻才推帧：帧时间戳由这一刻决定，
+         渲染耗时（每帧都不一样）就不会写进时间戳里。按绝对时刻对齐，
+         定时器误差也不会累积。渲染超时就立刻推，不空转。 */
+      const wait = t0 + i * frameMs - performance.now();
+      if (wait > 0) await sleepMs(wait);
+      if (manual) track.requestFrame();
+      if (i % (EXPORT_FPS * 2) === 0 || i === frames) {
+        $("#btnExport").textContent = `录制中 ${Math.round(i / frames * 100)}%`;
+      }
+    }
+    await sleepMs(180);                    /* 尾巴几帧留给编码器落盘 */
+  } finally {
     try { rec.stop(); } catch (e) { }
-  }, (scene.total + 0.35) * 1000 + 120);
+  }
 }
 
 /* =========================================================
